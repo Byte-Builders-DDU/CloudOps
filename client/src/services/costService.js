@@ -10,4 +10,15 @@ export const costService = {
     const response = await api.get('/costs/records', { params });
     return response.data;
   },
+
+  async getCostArbitrage(params = {}) {
+    const response = await api.get('/costs/arbitrage', { params });
+    return response.data;
+  },
+
+  async getRealizedSavings(params = {}) {
+    const response = await api.get('/costs/realized-savings', { params });
+    return response.data;
+  },
 };
+

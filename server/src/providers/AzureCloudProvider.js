@@ -82,6 +82,7 @@ export class AzureCloudProvider extends CloudProvider {
    */
   async _getComputeClient() {
     if (!this._computeClient) {
+      this._assertCredentials();
       const { ComputeManagementClient } = await import('@azure/arm-compute');
       const credential = await this._getCredential();
       this._computeClient = new ComputeManagementClient(credential, this.subscriptionId);
@@ -95,6 +96,7 @@ export class AzureCloudProvider extends CloudProvider {
    */
   async _getMonitorClient() {
     if (!this._monitorClient) {
+      this._assertCredentials();
       const { MetricsQueryClient } = await import('@azure/monitor-query');
       const credential = await this._getCredential();
       this._monitorClient = new MetricsQueryClient(credential);

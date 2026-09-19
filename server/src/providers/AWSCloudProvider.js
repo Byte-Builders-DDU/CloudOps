@@ -123,6 +123,7 @@ export class AWSCloudProvider extends CloudProvider {
    */
   async _getAutoScalingClient() {
     if (!this._autoScalingClient) {
+      this._assertCredentials();
       const { AutoScalingClient } = await import('@aws-sdk/client-auto-scaling');
       const credentials = await this._getCredentials();
       this._autoScalingClient = new AutoScalingClient({ region: this.region, credentials });
@@ -135,6 +136,7 @@ export class AWSCloudProvider extends CloudProvider {
    */
   async _getCloudWatchClient() {
     if (!this._cloudWatchClient) {
+      this._assertCredentials();
       const { CloudWatchClient } = await import('@aws-sdk/client-cloudwatch');
       const credentials = await this._getCredentials();
       this._cloudWatchClient = new CloudWatchClient({ region: this.region, credentials });
@@ -154,6 +156,7 @@ export class AWSCloudProvider extends CloudProvider {
    * @returns {Promise<Array>} Resources in CloudOps format
    */
   async getResources(filter = {}) {
+    this._assertCredentials();
     const { AutoScalingClient, DescribeAutoScalingGroupsCommand } = await import('@aws-sdk/client-auto-scaling');
     const credentials = await this._getCredentials();
     const client = new AutoScalingClient({ region: this.region, credentials });
@@ -201,6 +204,7 @@ export class AWSCloudProvider extends CloudProvider {
    * @returns {Promise<Object|null>} Resource or null
    */
   async getResourceById(id) {
+    this._assertCredentials();
     const { AutoScalingClient, DescribeAutoScalingGroupsCommand } = await import('@aws-sdk/client-auto-scaling');
     const credentials = await this._getCredentials();
     const client = new AutoScalingClient({ region: this.region, credentials });
@@ -406,6 +410,7 @@ export class AWSCloudProvider extends CloudProvider {
     const asgName = resource.externalId || resource.name;
 
     // Call AWS Auto Scaling SetDesiredCapacity
+    this._assertCredentials();
     const { AutoScalingClient, SetDesiredCapacityCommand } = await import('@aws-sdk/client-auto-scaling');
     const credentials = await this._getCredentials();
     const asClient = new AutoScalingClient({ region: this.region, credentials });

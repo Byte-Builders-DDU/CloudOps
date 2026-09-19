@@ -17,6 +17,8 @@ import {
   Layers,
   ArrowUpRight,
   Sparkles,
+  Scale,
+  CheckCircle2,
 } from 'lucide-react';
 import { costService } from '../services/costService';
 
@@ -26,6 +28,8 @@ export function Costs() {
   const [loading, setLoading] = useState(true);
   const [costSummary, setCostSummary] = useState(null);
   const [costRecords, setCostRecords] = useState([]);
+  const [arbitrageData, setArbitrageData] = useState(null);
+  const [realizedSavings, setRealizedSavings] = useState(null);
   const [activeBreakdownTab, setActiveBreakdownTab] = useState('provider'); // 'provider' | 'service'
 
   useEffect(() => {
@@ -35,9 +39,11 @@ export function Costs() {
   const loadCostData = async () => {
     setLoading(true);
     try {
-      const [summaryRes, recordsRes] = await Promise.all([
+      const [summaryRes, recordsRes, arbRes, savingsRes] = await Promise.all([
         costService.getCostSummary({ provider: selectedProvider, region: selectedRegion }),
         costService.getCostRecords({ provider: selectedProvider, limit: 20 }),
+        costService.getCostArbitrage().catch(() => ({ success: false })),
+        costService.getRealizedSavings().catch(() => ({ success: false })),
       ]);
 
       if (summaryRes.success) {
@@ -45,6 +51,12 @@ export function Costs() {
       }
       if (recordsRes.success) {
         setCostRecords(recordsRes.data);
+      }
+      if (arbRes.success && arbRes.data) {
+        setArbitrageData(arbRes.data);
+      }
+      if (savingsRes.success && savingsRes.data) {
+        setRealizedSavings(savingsRes.data);
       }
     } catch (err) {
       console.error('Failed to load cost governance data:', err);
@@ -138,6 +150,63 @@ export function Costs() {
           </CardBody>
         </Card>
       </div>
+
+      {/* Phase 3 Cross-Cloud Cost Arbitrage Table */}
+      {arbitrageData?.catalog && (
+        <Card>
+          <CardHeader
+            title="Cross-Cloud Cost Arbitrage & Instance Equivalence Catalog"
+            subtitle="Normalized 4 vCPU / RAM workload shapes benchmarked across AWS, Azure, and Google Cloud"
+          />
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-[#E2E8F0] text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th className="px-5 py-3.5">Workload Tier</th>
+                  <th className="px-5 py-3.5">Primary Workload</th>
+                  <th className="px-5 py-3.5">AWS (Instance / Rate)</th>
+                  <th className="px-5 py-3.5">Azure (Instance / Rate)</th>
+                  <th className="px-5 py-3.5">GCP (Instance / Rate)</th>
+                  <th className="px-5 py-3.5">Cheapest Provider</th>
+                  <th className="px-5 py-3.5 text-right">Max Savings</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E2E8F0] bg-white">
+                {arbitrageData.catalog.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-5 py-3.5 font-medium text-[#0F172A]">
+                      {row.tier}
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-500">
+                      {row.workloadType}
+                    </td>
+                    <td className="px-5 py-3.5 font-mono text-slate-700">
+                      <span className="font-semibold">{row.providers?.AWS?.instanceType}</span>
+                      <p className="text-[11px] text-slate-400">₹{row.providers?.AWS?.hourlyRateINR ?? '--'}/hr</p>
+                    </td>
+                    <td className="px-5 py-3.5 font-mono text-slate-700">
+                      <span className="font-semibold">{row.providers?.Azure?.instanceType}</span>
+                      <p className="text-[11px] text-slate-400">₹{row.providers?.Azure?.hourlyRateINR ?? '--'}/hr</p>
+                    </td>
+                    <td className="px-5 py-3.5 font-mono text-slate-700">
+                      <span className="font-semibold">{row.providers?.GCP?.instanceType}</span>
+                      <p className="text-[11px] text-slate-400">₹{row.providers?.GCP?.hourlyRateINR ?? '--'}/hr</p>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                        {row.cheapestProvider}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 text-right font-mono font-bold text-emerald-600">
+                      +{row.maxSavingsPercent}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Raw Billing Records Table */}
       <Card>

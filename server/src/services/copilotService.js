@@ -1,10 +1,12 @@
 import prisma from '../models/prisma.js';
 import { evaluateScalingImpact } from './scalingEngine.js';
+import { findRelevantRunbooks, formatRunbookCitations } from './runbookService.js';
 
 /**
  * AI Operations Copilot Service
- * Implements attributable, sandboxed operational intelligence with read-only tools
- * and verified citation snapshots conforming to PRD.md §5 (FR-06, FR-07) and DESIGN.md §6.10.
+ * Implements attributable, sandboxed operational intelligence with read-only tools,
+ * NVIDIA Build API (Gemma 2 / NIM) integration, and verified citation snapshots
+ * conforming to PRD.md §5 (FR-06, FR-07) and DESIGN.md §6.10.
  */
 
 // Tool 1: Inspect Telemetry Metrics
@@ -98,9 +100,100 @@ async function toolPreviewScalingImpact({ workspaceId, resourceId, proposedCapac
   });
 }
 
+let circuitBreakerUntil = 0;
+
 /**
- * Executes a conversational Copilot query, grounds it in database facts,
- * attaches structured citations [1], [2], and drafts non-executing proposals.
+ * Calls NVIDIA Build API (NVIDIA NIM) for OpenAI-compatible chat completions.
+ * Connects to https://integrate.api.nvidia.com/v1/chat/completions.
+ * Uses native fetch with timeout and returns parsed content + token metrics.
+ * Gracefully returns null on missing credentials, circuit break, or timeout to enable local fallback.
+ */
+async function callNvidiaBuildLLM({ systemPrompt, userPrompt, modelOverride }) {
+  if (Date.now() < circuitBreakerUntil) {
+    return null; // Circuit breaker active: immediate fallback
+  }
+
+  const apiKey = process.env.NVIDIA_API_KEY;
+  if (!apiKey || apiKey.trim() === '') {
+    return null; // Signals fallback to deterministic generator
+  }
+
+  const baseUrl = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
+  const model = modelOverride || process.env.NVIDIA_MODEL || 'google/gemma-4-31b-it';
+  const temperature = parseFloat(process.env.NVIDIA_TEMPERATURE || '0.2');
+  const maxTokens = parseInt(process.env.NVIDIA_MAX_TOKENS || '1024', 10);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout protection
+
+  try {
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature,
+        top_p: 0.7,
+        max_tokens: maxTokens,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      circuitBreakerUntil = Date.now() + 60000; // Trip circuit breaker for 60s
+      const errorText = await res.text();
+      console.warn(`[NVIDIA Build API] HTTP ${res.status}: ${errorText}. Circuit breaker active for 60s.`);
+      return null; // Graceful fallback
+    }
+
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const usage = data.usage || {};
+
+    return {
+      content,
+      modelIdentifier: `nvidia/${model}`,
+      tokensPrompt: usage.prompt_tokens || 450,
+      tokensCompletion: usage.completion_tokens || 220,
+      estimatedCost: 0.0003,
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    circuitBreakerUntil = Date.now() + 60000; // Trip circuit breaker for 60s
+    console.warn(`[NVIDIA Build API] Error/Timeout (${err.message}). Circuit breaker active for 60s. Gracefully degrading to deterministic engine.`);
+    return null;
+  }
+}
+
+/**
+ * Extracts a JSON block representing a structured change draft from model output, if present.
+ */
+function extractDraftJson(text) {
+  if (!text) return null;
+  const match = text.match(/```json\s*([\s\S]*?)\s*```/);
+  if (match) {
+    try {
+      return JSON.parse(match[1]);
+    } catch (e) {
+      // ignore parse failure
+    }
+  }
+  return null;
+}
+
+/**
+ * Executes a conversational Copilot query, grounds it in database facts and runbooks,
+ * attaches structured citations [1], [2], [3], and drafts non-executing proposals.
  */
 export async function executeCopilotQuery({ workspaceId, userId, prompt, threadId }) {
   // 1. Ensure or create thread
@@ -130,10 +223,14 @@ export async function executeCopilotQuery({ workspaceId, userId, prompt, threadI
   // 3. Ground query using deterministic tools
   const lower = prompt.toLowerCase();
   const citations = [];
-  let responseContent = '';
+  let deterministicResponse = '';
   let structuredDraft = null;
+  let factualContext = {};
 
-  if (lower.includes('scale') || lower.includes('capacity') || lower.includes('production api') || lower.includes('latency') || lower.includes('surge')) {
+  // Check for matching runbooks
+  const matchedRunbooks = findRelevantRunbooks(prompt, 2);
+
+  if (lower.includes('scale') || lower.includes('capacity') || lower.includes('production api') || lower.includes('latency') || lower.includes('surge') || lower.includes('alert')) {
     // Ground with telemetry tool
     const telemetry = await toolGetServiceMetrics({
       workspaceId,
@@ -172,7 +269,24 @@ export async function executeCopilotQuery({ workspaceId, userId, prompt, threadI
       snapshotJson: JSON.stringify(preview.policyChecks),
     });
 
-    responseContent = `Traffic to **Production API** increased by **34%**, while CPU utilization averaged **${telemetry.averageCpu}%** over the latest 10-minute window [1].
+    // Add runbook citations if matched
+    if (matchedRunbooks.length > 0) {
+      const rbCitations = formatRunbookCitations(matchedRunbooks, 4);
+      citations.push(...rbCitations);
+    }
+
+    factualContext = {
+      telemetry,
+      pricingPreview: preview,
+      policyChecks: preview.policyChecks,
+      runbooks: matchedRunbooks.map(rb => ({
+        id: rb.id,
+        title: rb.title,
+        steps: rb.remediationSteps,
+      })),
+    };
+
+    deterministicResponse = `Traffic to **Production API** increased by **34%**, while CPU utilization averaged **${telemetry.averageCpu}%** over the latest 10-minute window [1].
 
 Based on the deterministic capacity model targeting 60% CPU, increasing capacity from **${preview.resource.currentReplicas}** to **${preview.proposedCapacity} replicas** is recommended:
 - **Current Run-Rate:** ${preview.currency} ${preview.currentMonthlyRunRate.toLocaleString()}/month
@@ -181,7 +295,7 @@ Based on the deterministic capacity model targeting 60% CPU, increasing capacity
 - **Remaining-Period Impact:** +${preview.currency} ${preview.periodCostDelta.toLocaleString()} (leaving ${preview.currency} ${preview.budgetHeadroomAfter.toLocaleString()} budget headroom)
 
 > [!NOTE]
-> Latency recovery should be verified after stabilization. Because this is a production-tier service, our governance policy requires approval from a **separate Admin** [3].`;
+> Latency recovery should be verified after stabilization. Because this is a production-tier service, our governance policy requires approval from a **separate Admin** [3].${matchedRunbooks.length > 0 ? `\n\nOperational procedure reference: **${matchedRunbooks[0].title}** [4].` : ''}`;
 
     // Structured Draft payload for ChangeReview drawer handoff
     structuredDraft = {
@@ -208,7 +322,17 @@ Based on the deterministic capacity model targeting 60% CPU, increasing capacity
       snapshotJson: JSON.stringify(costData),
     });
 
-    responseContent = `Current month-to-date infrastructure spend across all connected cloud accounts is **${costData.currency} ${costData.incurredSpendTotal.toLocaleString()}** [1].
+    if (matchedRunbooks.length > 0) {
+      const rbCitations = formatRunbookCitations(matchedRunbooks, 2);
+      citations.push(...rbCitations);
+    }
+
+    factualContext = {
+      costBreakdown: costData,
+      runbooks: matchedRunbooks.map(rb => ({ id: rb.id, title: rb.title, steps: rb.remediationSteps })),
+    };
+
+    deterministicResponse = `Current month-to-date infrastructure spend across all connected cloud accounts is **${costData.currency} ${costData.incurredSpendTotal.toLocaleString()}** [1].
 
 **Top Spending Services:**
 - **RDS PostgreSQL Clusters:** Incurred the primary share of compute costs due to high storage IOPS allocation.
@@ -233,28 +357,75 @@ The month-end spend projection is currently estimated at **${costData.currency} 
       snapshotJson: JSON.stringify(telemetry),
     });
 
-    responseContent = `Across your workspace, **1 service requires attention**:
+    if (matchedRunbooks.length > 0) {
+      const rbCitations = formatRunbookCitations(matchedRunbooks, 2);
+      citations.push(...rbCitations);
+    }
+
+    factualContext = {
+      telemetry,
+      runbooks: matchedRunbooks.map(rb => ({ id: rb.id, title: rb.title, steps: rb.remediationSteps })),
+    };
+
+    deterministicResponse = `Across your workspace, **1 service requires attention**:
 1. **Production API** is currently in **Warning** health status due to elevated CPU (${telemetry.averageCpu}%) and a 34% traffic surge over the last 10 minutes [1].
 2. **Payment Gateway** and **Worker Service** are healthy and operating under normal loads.
 
 You can ask me to evaluate scaling options, review cost breakdowns, or investigate policy constraints.`;
   }
 
-  // 4. Persist assistant message
+  // 4. Try NVIDIA Build API (NVIDIA NIM with Gemma 2 or configured model)
+  const systemPrompt = `You are CloudOps Copilot, an enterprise AI assistant for cloud operations, scaling, and cost governance.
+Strict Rules:
+1. Base your statements STRICTLY on the following verified factual data context:
+${JSON.stringify(factualContext, null, 2)}
+2. DO NOT fabricate or hallucinate any numbers, prices, or capacities.
+3. Use bracketed citation markers like [1], [2], [3] whenever referencing numbers, metrics, or policies.
+4. Keep explanations concise, professional, and operational.
+5. If recommending capacity changes, summarize the before/after run-rate, monthly difference, and separate approval requirement.`;
+
+  let finalContent = deterministicResponse;
+  let modelIdentifier = 'nvidia/google/gemma-2-9b-it (grounded-fallback)';
+  let tokensPrompt = 450;
+  let tokensCompletion = 220;
+  let estimatedCost = 0.0003;
+
+  const llmResult = await callNvidiaBuildLLM({
+    systemPrompt,
+    userPrompt: prompt,
+  });
+
+  if (llmResult && llmResult.content && llmResult.content.trim().length > 0) {
+    finalContent = llmResult.content;
+    modelIdentifier = llmResult.modelIdentifier;
+    tokensPrompt = llmResult.tokensPrompt;
+    tokensCompletion = llmResult.tokensCompletion;
+    estimatedCost = llmResult.estimatedCost;
+
+    const extractedDraft = extractDraftJson(finalContent);
+    if (extractedDraft && extractedDraft.resourceId) {
+      structuredDraft = {
+        ...structuredDraft,
+        ...extractedDraft,
+      };
+    }
+  }
+
+  // 5. Persist assistant message
   const assistantMessage = await prisma.copilotMessage.create({
     data: {
       threadId: thread.id,
       role: 'ASSISTANT',
-      content: responseContent,
+      content: finalContent,
       structuredDraft: structuredDraft ? JSON.stringify(structuredDraft) : null,
-      modelIdentifier: 'gemini-2.0-flash-grounded',
-      tokensPrompt: 450,
-      tokensCompletion: 220,
-      estimatedCost: 0.0004,
+      modelIdentifier,
+      tokensPrompt,
+      tokensCompletion,
+      estimatedCost,
     },
   });
 
-  // 5. Persist citation snapshots
+  // 6. Persist citation snapshots
   for (const c of citations) {
     await prisma.copilotCitation.create({
       data: {
@@ -272,10 +443,11 @@ You can ask me to evaluate scaling options, review cost breakdowns, or investiga
     threadId: thread.id,
     messageId: assistantMessage.id,
     role: 'ASSISTANT',
-    content: responseContent,
+    content: finalContent,
     structuredDraft,
     citations,
     createdAt: assistantMessage.createdAt,
+    modelIdentifier,
   };
 }
 

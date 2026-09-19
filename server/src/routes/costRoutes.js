@@ -4,6 +4,8 @@ import {
   getCostRecords,
   getBudgetStatus,
   updateBudget,
+  getCostArbitrage,
+  getRealizedSavings,
 } from '../controllers/costController.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { resolveWorkspace, requireWorkspaceAdmin } from '../middleware/tenantMiddleware.js';
@@ -17,5 +19,7 @@ router.get('/summary', getCostSummary);
 router.get('/records', getCostRecords);
 router.get('/budget', getBudgetStatus);
 router.put('/budget', requireWorkspaceAdmin, updateBudget);
+router.get('/arbitrage', getCostArbitrage);
+router.get('/realized-savings', getRealizedSavings);
 
 export default router;

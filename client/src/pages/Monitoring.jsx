@@ -16,9 +16,11 @@ import {
   RefreshCw,
   HardDrive,
   Zap,
+  TrendingUp,
 } from 'lucide-react';
 import { resourceService } from '../services/resourceService';
 import { metricService } from '../services/metricService';
+import { ForecastChart } from '../components/charts/ForecastChart';
 
 export function Monitoring() {
   const { selectedProvider, selectedRegion } = useCloudFilter();
@@ -30,6 +32,12 @@ export function Monitoring() {
   const [metrics, setMetrics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMetrics, setLoadingMetrics] = useState(false);
+
+  // Phase 2 Forecast state
+  const [activeView, setActiveView] = useState('telemetry'); // 'telemetry' | 'forecast'
+  const [forecastData, setForecastData] = useState([]);
+  const [backtestSummary, setBacktestSummary] = useState(null);
+  const [loadingForecast, setLoadingForecast] = useState(false);
 
   // Load resources list
   useEffect(() => {
@@ -54,10 +62,11 @@ export function Monitoring() {
     loadResourceList();
   }, [selectedProvider, selectedRegion]);
 
-  // Load metrics for selected resource
+  // Load metrics and forecast for selected resource
   useEffect(() => {
     if (selectedResourceId) {
       loadResourceMetrics();
+      loadResourceForecast();
     }
   }, [selectedResourceId, timeRange]);
 
@@ -93,6 +102,22 @@ export function Monitoring() {
       console.error('Failed to load telemetry:', err);
     } finally {
       setLoadingMetrics(false);
+    }
+  };
+
+  const loadResourceForecast = async () => {
+    if (!selectedResourceId) return;
+    setLoadingForecast(true);
+    try {
+      const res = await metricService.getResourceForecast(selectedResourceId, { horizon: 24 });
+      if (res.success && res.data) {
+        setForecastData(res.data.forecastPoints || []);
+        setBacktestSummary(res.data.backtestSummary || null);
+      }
+    } catch (err) {
+      console.error('Failed to load forecast:', err);
+    } finally {
+      setLoadingForecast(false);
     }
   };
 
@@ -220,72 +245,128 @@ export function Monitoring() {
         </div>
       )}
 
-      {/* Deep Telemetry Charts 2x2 Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* CPU Utilization Chart */}
-        <Card>
-          <CardHeader
-            title="CPU Utilization"
-            subtitle="Percent processor load across allocated cores"
-          />
-          <CardBody>
-            <TelemetryChart
-              data={metrics}
-              metricKey="cpuUsage"
-              unit="%"
-              color="#2563EB"
-            />
-          </CardBody>
-        </Card>
-
-        {/* Memory Utilization Chart */}
-        <Card>
-          <CardHeader
-            title="Memory (RAM) Utilization"
-            subtitle="Allocated memory buffers and cache load"
-          />
-          <CardBody>
-            <TelemetryChart
-              data={metrics}
-              metricKey="memoryUsage"
-              unit="%"
-              color="#10B981"
-            />
-          </CardBody>
-        </Card>
-
-        {/* Response Latency Chart */}
-        <Card>
-          <CardHeader
-            title="End-to-End Response Latency"
-            subtitle="Round-trip request processing latency (ms)"
-          />
-          <CardBody>
-            <TelemetryChart
-              data={metrics}
-              metricKey="latency"
-              unit="ms"
-              color="#F59E0B"
-            />
-          </CardBody>
-        </Card>
-
-        {/* Request Throughput Chart */}
-        <Card>
-          <CardHeader
-            title="Request Throughput"
-            subtitle="Ingress requests per minute"
-          />
-          <CardBody>
-            <TelemetryChart
-              data={metrics}
-              metricKey="requests"
-              unit="req/m"
-              color="#8B5CF6"
-            />
-          </CardBody>
-        </Card>
+      {/* View Switcher: Live Telemetry vs Predictive Forecast */}
+      <div className="flex items-center gap-2 border-b border-slate-200">
+        <button
+          onClick={() => setActiveView('telemetry')}
+          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors border-b-2 -mb-px flex items-center gap-2 ${
+            activeView === 'telemetry'
+              ? 'border-blue-600 text-blue-600 bg-white shadow-xs'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Activity className="w-4 h-4" />
+          Live Telemetry Streams (4 Metrics)
+        </button>
+        <button
+          onClick={() => {
+            setActiveView('forecast');
+            if (forecastData.length === 0) loadResourceForecast();
+          }}
+          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors border-b-2 -mb-px flex items-center gap-2 ${
+            activeView === 'forecast'
+              ? 'border-purple-600 text-purple-600 bg-purple-50/50 shadow-xs'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4 text-purple-600" />
+          24-Hour Demand Forecast & Prediction Intervals (R2)
+        </button>
       </div>
+
+      {activeView === 'forecast' ? (
+        <Card>
+          <CardHeader
+            title={`${currentResource?.name || 'Resource'} — 24-Hour Demand Forecast`}
+            subtitle="Hourly demand prediction with 80% and 95% statistical confidence intervals"
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                icon={RefreshCw}
+                onClick={loadResourceForecast}
+                isLoading={loadingForecast}
+              >
+                Recompute Forecast
+              </Button>
+            }
+          />
+          <CardBody>
+            <ForecastChart
+              forecastData={forecastData}
+              backtestSummary={backtestSummary}
+              resourceName={currentResource?.name}
+            />
+          </CardBody>
+        </Card>
+      ) : (
+        /* Deep Telemetry Charts 2x2 Grid */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* CPU Utilization Chart */}
+          <Card>
+            <CardHeader
+              title="CPU Utilization"
+              subtitle="Percent processor load across allocated cores"
+            />
+            <CardBody>
+              <TelemetryChart
+                data={metrics}
+                metricKey="cpuUsage"
+                unit="%"
+                color="#2563EB"
+              />
+            </CardBody>
+          </Card>
+
+          {/* Memory Utilization Chart */}
+          <Card>
+            <CardHeader
+              title="Memory (RAM) Utilization"
+              subtitle="Allocated memory buffers and cache load"
+            />
+            <CardBody>
+              <TelemetryChart
+                data={metrics}
+                metricKey="memoryUsage"
+                unit="%"
+                color="#10B981"
+              />
+            </CardBody>
+          </Card>
+
+          {/* Response Latency Chart */}
+          <Card>
+            <CardHeader
+              title="End-to-End Response Latency"
+              subtitle="Round-trip request processing latency (ms)"
+            />
+            <CardBody>
+              <TelemetryChart
+                data={metrics}
+                metricKey="latency"
+                unit="ms"
+                color="#F59E0B"
+              />
+            </CardBody>
+          </Card>
+
+          {/* Request Throughput Chart */}
+          <Card>
+            <CardHeader
+              title="Request Throughput"
+              subtitle="Ingress requests per minute"
+            />
+            <CardBody>
+              <TelemetryChart
+                data={metrics}
+                metricKey="requests"
+                unit="req/m"
+                color="#8B5CF6"
+              />
+            </CardBody>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

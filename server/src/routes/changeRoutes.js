@@ -6,6 +6,7 @@ import {
   approveChange,
   rejectChange,
   getOperationTimeline,
+  getChangeOutcomeController,
 } from '../controllers/changeController.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { resolveWorkspace } from '../middleware/tenantMiddleware.js';
@@ -21,5 +22,6 @@ router.get('/', getChanges);
 router.post('/:id/approve', approveChange);
 router.post('/:id/reject', rejectChange);
 router.get('/:id/operations', getOperationTimeline);
+router.get('/:id/outcome', getChangeOutcomeController);
 
 export default router;

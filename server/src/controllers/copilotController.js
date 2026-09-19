@@ -8,7 +8,8 @@ import { executeCopilotQuery, generateOperationalBrief } from '../services/copil
 
 export async function chatWithCopilot(req, res, next) {
   try {
-    const { prompt, threadId } = req.body;
+    const prompt = req.body.prompt || req.body.message || req.body.query;
+    const { threadId } = req.body;
     const workspaceId = req.workspaceId;
     const userId = req.user.id;
 

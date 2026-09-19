@@ -272,3 +272,36 @@ export async function updateBudget(req, res, next) {
     next(error);
   }
 }
+
+/**
+ * Get Cross-Cloud Cost Arbitrage evaluation for workspace
+ */
+export async function getCostArbitrage(req, res, next) {
+  try {
+    const { getCrossCloudArbitrage } = await import('../services/arbitrageService.js');
+    const arbitrage = await getCrossCloudArbitrage(req.workspaceId);
+    return res.status(200).json({
+      success: true,
+      data: arbitrage,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Get aggregated Realized Savings across applied changes in workspace
+ */
+export async function getRealizedSavings(req, res, next) {
+  try {
+    const { getWorkspaceRealizedSavings } = await import('../services/outcomeService.js');
+    const savings = await getWorkspaceRealizedSavings(req.workspaceId);
+    return res.status(200).json({
+      success: true,
+      data: savings,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+

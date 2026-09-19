@@ -10,4 +10,10 @@ export const metricService = {
     const response = await api.get(`/metrics/${resourceId}`, { params });
     return response.data;
   },
+
+  async getResourceForecast(resourceId, params = {}) {
+    const response = await api.get(`/metrics/forecast/${resourceId}`, { params });
+    return response.data;
+  },
 };
+

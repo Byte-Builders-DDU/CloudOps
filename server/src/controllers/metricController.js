@@ -1,5 +1,25 @@
 import { getCloudProvider } from '../providers/index.js';
 import prisma from '../models/prisma.js';
+import { getResourceDemandForecast } from '../services/forecastService.js';
+
+/**
+ * Get 24-hour or 7-day demand forecast with 80% and 95% confidence intervals
+ */
+export async function getResourceForecast(req, res, next) {
+  try {
+    const { resourceId } = req.params;
+    const { horizon = 24 } = req.query;
+
+    const forecastData = await getResourceDemandForecast(resourceId, parseInt(horizon, 10));
+
+    return res.status(200).json({
+      success: true,
+      data: forecastData,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
 
 /**
  * Get time-series metrics for a specific resource

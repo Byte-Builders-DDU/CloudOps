@@ -9,12 +9,13 @@ import { evaluateScalingImpact } from '../services/scalingEngine.js';
 // 1. Compute Deterministic Preview
 export async function previewChange(req, res, next) {
   try {
-    const { resourceId, proposedCapacity } = req.body;
+    const { resourceId } = req.body;
+    const capacityVal = req.body.proposedCapacity !== undefined ? req.body.proposedCapacity : req.body.targetCapacity;
     const workspaceId = req.workspaceId;
     const userId = req.user?.id;
     const userRole = req.workspaceRole || req.user?.role || 'VIEWER';
 
-    if (!resourceId || proposedCapacity === undefined) {
+    if (!resourceId || capacityVal === undefined) {
       return res.status(400).json({
         success: false,
         error: { message: 'resourceId and proposedCapacity are required.' },
@@ -24,7 +25,7 @@ export async function previewChange(req, res, next) {
     const preview = await evaluateScalingImpact({
       workspaceId,
       resourceId,
-      proposedCapacity: Number(proposedCapacity),
+      proposedCapacity: Number(capacityVal),
       userId,
       userRole,
     });
@@ -43,11 +44,12 @@ export async function submitChange(req, res, next) {
   try {
     const {
       resourceId,
-      proposedCapacity,
-      changeNote,
       source = 'MANUAL',
       sourceRecommendationId,
     } = req.body;
+    const rawCapacity = req.body.proposedCapacity !== undefined ? req.body.proposedCapacity : req.body.targetCapacity;
+    const proposedCapacity = Number(rawCapacity);
+    const changeNote = req.body.changeNote || req.body.reason || req.body.note || '';
 
     const workspaceId = req.workspaceId;
     const userId = req.user.id;
@@ -60,11 +62,18 @@ export async function submitChange(req, res, next) {
       });
     }
 
+    if (rawCapacity === undefined || isNaN(proposedCapacity)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'proposedCapacity (or targetCapacity) must be a valid number.' },
+      });
+    }
+
     // Re-evaluate deterministic preview at submission time
     const evaluation = await evaluateScalingImpact({
       workspaceId,
       resourceId,
-      proposedCapacity: Number(proposedCapacity),
+      proposedCapacity,
       userId,
       userRole,
     });
@@ -139,6 +148,7 @@ export async function submitChange(req, res, next) {
     res.status(201).json({
       success: true,
       data: {
+        id: changeRequest.id,
         changeRequest,
         operationId: operation.id,
         status: changeRequest.status,
@@ -351,3 +361,20 @@ export async function getOperationTimeline(req, res, next) {
     next(error);
   }
 }
+
+// 7. Get Post-Change Outcome & Realized Savings Measurement
+export async function getChangeOutcomeController(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { getChangeOutcome } = await import('../services/outcomeService.js');
+    const outcome = await getChangeOutcome(id);
+
+    res.json({
+      success: true,
+      data: outcome,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
