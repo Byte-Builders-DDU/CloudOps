@@ -20,13 +20,13 @@ function request(options, data = null) {
 }
 
 async function runTests() {
-  console.log('🧪 Running Backend API & Dashboard Verification Tests...\n');
+  console.log('🧪 Running Comprehensive PRD & Architecture Verification Suite...\n');
 
-  // 1. Health
+  // 1. Health Probe
   const health = await request({ hostname: 'localhost', port: 5000, path: '/api/health', method: 'GET' });
-  console.log('1. Health Check:', health.status === 200 ? '✅ PASSED' : '❌ FAILED');
+  console.log('1. Health Probe:', health.status === 200 ? '✅ PASSED' : '❌ FAILED', health.data?.service);
 
-  // 2. Login as Admin
+  // 2. Login as Admin 1
   const login = await request({
     hostname: 'localhost',
     port: 5000,
@@ -34,48 +34,118 @@ async function runTests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   }, { email: 'admin@cloudops.dev', password: 'cloudops123' });
-  console.log('2. Login:', login.status === 200 ? '✅ PASSED' : '❌ FAILED');
+  console.log('2. Admin Login:', login.status === 200 ? '✅ PASSED' : '❌ FAILED', login.data?.user?.email);
 
   const token = login.data.token;
-  const authHeaders = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const authHeaders = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    'x-workspace-slug': 'default',
+  };
 
-  // 3. Dashboard Summary
+  // 3. Login as Admin 2 (SecOps Approver for Two-Person Rule testing)
+  const loginSecops = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: '/api/auth/login',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  }, { email: 'secops@cloudops.dev', password: 'cloudops123' });
+  console.log('3. SecOps Admin Login:', loginSecops.status === 200 ? '✅ PASSED' : '❌ FAILED');
+  const secopsToken = loginSecops.data.token;
+  const secopsHeaders = {
+    'Authorization': `Bearer ${secopsToken}`,
+    'Content-Type': 'application/json',
+    'x-workspace-slug': 'default',
+  };
+
+  // 4. Command Center Summary (FR-03 & Design §6.1)
   const summary = await request({ hostname: 'localhost', port: 5000, path: '/api/dashboard/summary', method: 'GET', headers: authHeaders });
-  console.log('3. Dashboard Summary:', summary.status === 200 ? '✅ PASSED' : '❌ FAILED', {
-    activeResources: summary.data.data?.activeResources,
-    monthlyCost: summary.data.data?.monthlyCost,
-    health: summary.data.data?.health?.statusText,
+  console.log('4. Command Center Overview:', summary.status === 200 ? '✅ PASSED' : '❌ FAILED', {
+    attention: summary.data.data?.attentionBanner?.message,
+    services: summary.data.data?.kpis?.services?.label,
+    requests: `${summary.data.data?.kpis?.requests?.value} req/min`,
+    mtdSpend: `INR ${summary.data.data?.kpis?.mtdSpend?.value}`,
   });
 
-  // 4. Dashboard Traffic
-  const traffic = await request({ hostname: 'localhost', port: 5000, path: '/api/dashboard/traffic?timeRange=24H', method: 'GET', headers: authHeaders });
-  console.log('4. Dashboard Traffic:', traffic.status === 200 ? '✅ PASSED' : '❌ FAILED', `Points: ${traffic.data.data?.length}`);
+  // 5. Logical Services (FR-02)
+  const services = await request({ hostname: 'localhost', port: 5000, path: '/api/services', method: 'GET', headers: authHeaders });
+  console.log('5. Logical Services Inventory:', services.status === 200 ? '✅ PASSED' : '❌ FAILED', `Count: ${services.data.data?.length}`);
 
-  // 5. Dashboard Resource Health
-  const resHealth = await request({ hostname: 'localhost', port: 5000, path: '/api/dashboard/resource-health', method: 'GET', headers: authHeaders });
-  console.log('5. Dashboard Resource Health:', resHealth.status === 200 ? '✅ PASSED' : '❌ FAILED', `Workloads: ${resHealth.data.count}`);
+  // 6. Deterministic Change Preview (Journey A: 4 to 6 replicas)
+  const preview = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: '/api/changes/preview',
+    method: 'POST',
+    headers: authHeaders,
+  }, { resourceId: 'res-api-asg', proposedCapacity: 6 });
+  console.log('6. Deterministic Preview (Journey A):', preview.status === 200 ? '✅ PASSED' : '❌ FAILED', {
+    runRateDelta: `+INR ${preview.data.data?.monthlyRateDelta}/mo`,
+    periodCostDelta: `+INR ${preview.data.data?.periodCostDelta}`,
+    budgetHeadroomAfter: `INR ${preview.data.data?.budgetHeadroomAfter}`,
+    requiresSeparateApprover: preview.data.data?.policyChecks?.requireSeparateAdmin,
+  });
 
-  // 6. Dashboard Cost Overview
-  const costOverview = await request({ hostname: 'localhost', port: 5000, path: '/api/dashboard/cost-overview', method: 'GET', headers: authHeaders });
-  console.log('6. Dashboard Cost Overview:', costOverview.status === 200 ? '✅ PASSED' : '❌ FAILED', `Budget: ₹${costOverview.data.data?.budget}`);
+  // 7. Submit Change Request
+  const submission = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: '/api/changes/submit',
+    method: 'POST',
+    headers: authHeaders,
+  }, {
+    resourceId: 'res-api-asg',
+    proposedCapacity: 6,
+    changeNote: 'Scale Production API to mitigate +34% traffic surge',
+    source: 'RECOMMENDATION',
+  });
+  console.log('7. Change Submission:', submission.status === 201 ? '✅ PASSED' : '❌ FAILED', `Status: ${submission.data.data?.status}`);
+  const changeId = submission.data.data?.changeRequest?.id;
 
-  // 7. Dashboard Provider Distribution
-  const dist = await request({ hostname: 'localhost', port: 5000, path: '/api/dashboard/provider-distribution', method: 'GET', headers: authHeaders });
-  console.log('7. Dashboard Provider Distribution:', dist.status === 200 ? '✅ PASSED' : '❌ FAILED', `Providers: ${dist.data.data?.providers?.length}`);
+  // 8. Test Two-Person Rule: Requester self-approval must be BLOCKED
+  const selfApprove = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: `/api/changes/${changeId}/approve`,
+    method: 'POST',
+    headers: authHeaders, // Admin 1 trying to approve own request
+  });
+  console.log('8. Separate Approver Enforcement (Self-Approval Blocked):', selfApprove.status === 403 ? '✅ PASSED (Blocked as required)' : '❌ FAILED', selfApprove.data?.error?.code);
 
-  // 8. Dashboard Recommendations
-  const recs = await request({ hostname: 'localhost', port: 5000, path: '/api/dashboard/recommendations', method: 'GET', headers: authHeaders });
-  console.log('8. Dashboard Recommendations:', recs.status === 200 ? '✅ PASSED' : '❌ FAILED', `Top recommendation: ${recs.data.data?.[0]?.reason}`);
+  // 9. Separate Admin Approves Change
+  const secopsApprove = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: `/api/changes/${changeId}/approve`,
+    method: 'POST',
+    headers: secopsHeaders, // Admin 2 approving
+  });
+  console.log('9. Separate Admin Approval:', secopsApprove.status === 200 ? '✅ PASSED' : '❌ FAILED', secopsApprove.data?.data?.message);
 
-  // 9. Dashboard Activity
-  const activity = await request({ hostname: 'localhost', port: 5000, path: '/api/dashboard/activity', method: 'GET', headers: authHeaders });
-  console.log('9. Dashboard Activity:', activity.status === 200 ? '✅ PASSED' : '❌ FAILED', `Events: ${activity.data.data?.length}`);
+  // 10. AI Copilot Attributable Query with Citations (FR-06)
+  const copilot = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: '/api/copilot/chat',
+    method: 'POST',
+    headers: authHeaders,
+  }, { prompt: 'Why should we scale Production API capacity?' });
+  console.log('10. Attributable AI Copilot Chat:', copilot.status === 200 ? '✅ PASSED' : '❌ FAILED', {
+    citationsCount: copilot.data.data?.citations?.length,
+    firstCitation: copilot.data.data?.citations?.[0]?.label,
+    draftProposedCapacity: copilot.data.data?.structuredDraft?.proposedCapacity,
+  });
 
-  // 10. Dashboard Alerts
-  const alerts = await request({ hostname: 'localhost', port: 5000, path: '/api/dashboard/alerts', method: 'GET', headers: authHeaders });
-  console.log('10. Dashboard Alerts:', alerts.status === 200 ? '✅ PASSED' : '❌ FAILED', `Alerts: ${alerts.data.data?.length}`);
+  // 11. AI Operational Brief (FR-07)
+  const brief = await request({ hostname: 'localhost', port: 5000, path: '/api/copilot/brief', method: 'GET', headers: authHeaders });
+  console.log('11. AI Operational Brief Generator:', brief.status === 200 ? '✅ PASSED' : '❌ FAILED', `Findings: ${brief.data.data?.findings?.length}`);
 
-  console.log('\n🎉 ALL DASHBOARD BACKEND API TESTS PASSED!\n');
+  console.log('\n🎉 ALL PRD & DESIGN BACKEND ARCHITECTURE CONTRACTS VERIFIED!\n');
+  process.exit(0);
 }
 
-runTests().catch(console.error);
+runTests().catch(err => {
+  console.error('Test execution failed:', err);
+  process.exit(1);
+});

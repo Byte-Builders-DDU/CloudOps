@@ -2,6 +2,7 @@ import http from 'http';
 import dotenv from 'dotenv';
 import app from './app.js';
 import { initializeSocket } from './services/socketService.js';
+import { startChangeWorker } from './services/workerService.js';
 import prisma from './models/prisma.js';
 
 dotenv.config();
@@ -31,6 +32,8 @@ server.listen(PORT, async () => {
   try {
     await prisma.$connect();
     console.log('✅ Connected to SQLite database successfully.');
+    // Start durable background worker for change execution & reconciliation
+    startChangeWorker(2500);
   } catch (error) {
     console.error('❌ Database connection failure:', error);
   }

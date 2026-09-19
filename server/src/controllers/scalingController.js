@@ -1,6 +1,5 @@
 import prisma from '../models/prisma.js';
-import { getCloudProvider } from '../providers/index.js';
-import { emitResourceScaled } from '../services/socketService.js';
+import { evaluateScalingImpact } from '../services/scalingEngine.js';
 
 /**
  * List scaling recommendations
@@ -12,6 +11,8 @@ export async function getRecommendations(req, res, next) {
     const where = {};
     if (status && status !== 'ALL') {
       where.status = status;
+    } else {
+      where.status = { in: ['ACTIVE', 'PENDING'] };
     }
 
     const recommendations = await prisma.scalingRecommendation.findMany({
@@ -20,15 +21,16 @@ export async function getRecommendations(req, res, next) {
         resource: {
           include: {
             cloudAccount: true,
+            logicalService: true,
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { urgency: 'asc' },
     });
 
-    const pendingCount = recommendations.filter(r => r.status === 'PENDING').length;
+    const pendingCount = recommendations.length;
     const totalPotentialSavings = recommendations
-      .filter(r => r.status === 'PENDING' && r.estimatedCostChange < 0)
+      .filter(r => r.estimatedCostChange < 0)
       .reduce((acc, curr) => acc + Math.abs(curr.estimatedCostChange), 0);
 
     return res.status(200).json({
@@ -37,7 +39,7 @@ export async function getRecommendations(req, res, next) {
       meta: {
         total: recommendations.length,
         pendingCount,
-        totalPotentialSavings: Math.round(totalPotentialSavings * 100) / 100,
+        totalPotentialSavings: Math.round(totalPotentialSavings),
       },
     });
   } catch (error) {
@@ -46,88 +48,55 @@ export async function getRecommendations(req, res, next) {
 }
 
 /**
- * Apply a scaling recommendation (Admin & Operator only)
- */
-export async function applyRecommendation(req, res, next) {
-  try {
-    const { id } = req.params;
-
-    const rec = await prisma.scalingRecommendation.findUnique({
-      where: { id },
-      include: { resource: { include: { cloudAccount: true } } },
-    });
-
-    if (!rec) {
-      return res.status(404).json({
-        success: false,
-        message: `Recommendation with ID ${id} not found.`,
-      });
-    }
-
-    if (rec.status === 'APPLIED') {
-      return res.status(400).json({
-        success: false,
-        message: 'This recommendation has already been applied.',
-      });
-    }
-
-    // Use CloudProvider to execute scaling and policy validation
-    const cloudProvider = getCloudProvider();
-    const result = await cloudProvider.scaleResource(rec.resourceId, rec.recommendedCapacity, req.user);
-
-    // Update recommendation status
-    const updatedRec = await prisma.scalingRecommendation.update({
-      where: { id },
-      data: { status: 'APPLIED' },
-    });
-
-    // Notify clients via Socket.IO
-    emitResourceScaled(result.resource);
-
-    return res.status(200).json({
-      success: true,
-      message: `Recommendation successfully applied. ${rec.resource.name} capacity scaled from ${rec.currentCapacity} to ${rec.recommendedCapacity}.`,
-      data: {
-        recommendation: updatedRec,
-        scaleResult: result,
-      },
-    });
-  } catch (error) {
-    return res.status(400).json({
-      success: false,
-      message: error.message || 'Failed to apply scaling recommendation.',
-    });
-  }
-}
-
-/**
- * Dismiss a scaling recommendation
+ * Dismiss or snooze a recommendation
  */
 export async function dismissRecommendation(req, res, next) {
   try {
     const { id } = req.params;
+    const { reason, snoozeMinutes } = req.body;
+
+    const status = snoozeMinutes ? 'SNOOZED' : 'DISMISSED';
+    const snoozedUntil = snoozeMinutes ? new Date(Date.now() + snoozeMinutes * 60 * 1000) : null;
 
     const updated = await prisma.scalingRecommendation.update({
       where: { id },
-      data: { status: 'DISMISSED' },
-    });
-
-    await prisma.auditLog.create({
       data: {
-        userId: req.user.id,
-        action: 'DISMISS_RECOMMENDATION',
-        resourceId: updated.resourceId,
-        details: JSON.stringify({
-          recommendationId: id,
-          dismissedBy: req.user.name,
-        }),
+        status,
+        dismissReason: reason || null,
+        snoozedUntil,
       },
     });
 
-    return res.status(200).json({
+    res.json({
       success: true,
-      message: 'Recommendation dismissed.',
       data: updated,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Manual preview scaling
+ */
+export async function previewScaling(req, res, next) {
+  try {
+    const { resourceId, targetCapacity } = req.body;
+    const workspaceId = req.workspaceId || 'ws-prod-001';
+    const userId = req.user?.id;
+    const userRole = req.workspaceRole || req.user?.role || 'VIEWER';
+
+    const preview = await evaluateScalingImpact({
+      workspaceId,
+      resourceId,
+      proposedCapacity: Number(targetCapacity),
+      userId,
+      userRole,
+    });
+
+    res.json({
+      success: true,
+      data: preview,
     });
   } catch (error) {
     next(error);

@@ -7,99 +7,425 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model User {
-  id        String     @id @default(uuid())
-  name      String
-  email     String     @unique
-  password  String
-  role      String     @default("VIEWER") // "ADMIN" | "OPERATOR" | "VIEWER"
-  createdAt DateTime   @default(now())
-  auditLogs AuditLog[]
+// ---------------------------------------------------------------------------
+// Tenancy & Identity
+// ---------------------------------------------------------------------------
+
+model Workspace {
+  id                 String                @id @default(uuid())
+  slug               String                @unique
+  name               String
+  isDemo             Boolean               @default(false)
+  currency           String                @default("INR") // "INR", "USD", "EUR"
+  aiMonthlyBudget    Float                 @default(50.0) // In USD
+  currentAiSpend     Float                 @default(0.0)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  memberships        WorkspaceMembership[]
+  cloudAccounts      CloudAccount[]
+  services           Service[]
+  policies           Policy[]
+  budgets            Budget[]
+  changeRequests     ChangeRequest[]
+  auditLogs          AuditLog[]
+  copilotThreads     CopilotThread[]
+  knowledgeDocuments KnowledgeDocument[]
+  notifications      Notification[]
 }
 
+model User {
+  id                 String                @id @default(uuid())
+  email              String                @unique
+  name               String
+  password           String
+  role               String                @default("VIEWER") // "ADMIN", "OPERATOR", "VIEWER"
+  systemRole         String                @default("USER") // "USER", "SUPERADMIN"
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  memberships        WorkspaceMembership[]
+  auditLogs          AuditLog[]
+  initiatedRequests  ChangeRequest[]       @relation("RequesterRelation")
+  approvedRequests   ChangeRequest[]       @relation("ApproverRelation")
+  copilotThreads     CopilotThread[]
+  notifications      Notification[]
+}
+
+model WorkspaceMembership {
+  id          String    @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        String    @default("VIEWER") // "ADMIN", "OPERATOR", "VIEWER"
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+}
+
+// ---------------------------------------------------------------------------
+// Cloud Infrastructure & Logical Services
+// ---------------------------------------------------------------------------
+
 model CloudAccount {
-  id          String       @id @default(uuid())
-  provider    String       // "AWS" | "Azure" | "GCP"
+  id          String     @id @default(uuid())
+  workspaceId String
+  provider    String     // "AWS", "Azure", "GCP", "MOCK"
   accountName String
-  region      String
-  status      String       @default("ACTIVE") // "ACTIVE" | "WARNING" | "ERROR"
-  createdAt   DateTime     @default(now())
+  accountId   String     // Cloud provider assigned account/subscription ID
+  region      String     // Primary canonical region
+  roleArn     String?    // IAM Role ARN for cross-account assume-role
+  status      String     @default("ACTIVE") // "ACTIVE", "WARNING", "ERROR", "SYNCING"
+  lastSyncAt  DateTime   @default(now())
+  createdAt   DateTime   @default(now())
+
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   resources   Resource[]
   costRecords CostRecord[]
+}
+
+model Service {
+  id             String         @id @default(uuid())
+  workspaceId    String
+  name           String         // e.g., "Production API", "Payment Gateway"
+  environment    String         @default("PRODUCTION") // "PRODUCTION", "STAGING", "DEV"
+  owner          String         // Team/Individual email or tag
+  health         String         @default("HEALTHY") // "HEALTHY", "WARNING", "CRITICAL", "UNKNOWN"
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  resources      Resource[]
+  changeRequests ChangeRequest[]
 }
 
 model Resource {
   id                     String                  @id @default(uuid())
   cloudAccountId         String
-  cloudAccount           CloudAccount            @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
-  name                   String
-  type                   String                  // "Compute" | "Database" | "Storage" | "Cache" | "Serverless"
-  service                String                  // e.g. "EC2", "RDS", "S3", "ElastiCache", "AKS", "BigQuery"
-  region                 String                  // "Mumbai", "Singapore", "East US", "Frankfurt"
-  status                 String                  @default("RUNNING") // "RUNNING" | "STOPPED" | "DEGRADED" | "SCALING"
-  cpu                    Float                   // vCPU count
+  serviceId              String?
+  name                   String                  // Physical resource name (e.g. "api-asg", "prod-db")
+  providerResourceId     String?                 // e.g. "arn:aws:autoscaling:ap-south-1:...:autoScalingGroupName/api-asg"
+  type                   String                  // "Compute", "Database", "Storage", "Cache", "Serverless"
+  service                String                  // "EC2", "RDS", "S3", "ElastiCache", "AKS"
+  region                 String                  // Canonical region: "ap-south-1", "eastus", "us-central1"
+  status                 String                  @default("RUNNING") // "RUNNING", "STOPPED", "DEGRADED", "SCALING"
+  controllerOwnership    String                  @default("CLOUDOPS") // "CLOUDOPS", "EXTERNAL_ASG", "READ_ONLY"
+  
+  // Sizing & Configuration
+  cpu                    Float                   // vCPU allocation
   memory                 Float                   // RAM in GB
   storage                Float                   // Storage in GB
   instanceCount          Int                     @default(1)
-  monthlyCost            Float
+  minInstances           Int                     @default(1)
+  maxInstances           Int                     @default(10)
+  monthlyCost            Float                   // Computed monthly run-rate in workspace currency
+  hourlyRate             Float                   @default(0.0) // Hourly unit rate
+  
+  version                Int                     @default(1) // Optimistic locking version
   createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  cloudAccount           CloudAccount            @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  logicalService         Service?                @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   metrics                Metric[]
   scalingRecommendations ScalingRecommendation[]
+  changeRequests         ChangeRequest[]
 }
 
+// ---------------------------------------------------------------------------
+// Telemetry, Metrics & Observability
+// ---------------------------------------------------------------------------
+
 model Metric {
-  id          String   @id @default(uuid())
-  resourceId  String
-  resource    Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
-  timestamp   DateTime @default(now())
-  cpuUsage    Float    // percentage 0-100
-  memoryUsage Float    // percentage 0-100
-  networkIn   Float    // MB/s
-  networkOut  Float    // MB/s
-  latency     Float    // ms
-  requests    Int      // req/min
+  id                   String   @id @default(uuid())
+  resourceId           String
+  timestamp            DateTime @default(now())
+  
+  // Utilization Metrics
+  cpuUsage             Float    // 0.0 to 100.0 percent
+  memoryUsage          Float    // 0.0 to 100.0 percent
+  networkIn            Float    // MB/s
+  networkOut           Float    // MB/s
+  storageUsedBytes     Float?   // Actual bytes consumed
+  storageTotalBytes    Float?   // Total bytes allocated
+  
+  // Application Performance
+  latency              Float    // Average latency in ms
+  latencyP95           Float?   // 95th percentile latency in ms
+  requests             Int      // Requests per minute
+  errorRate            Float    @default(0.0) // 0.0 to 100.0 percent
+  
+  // Observability Quality
+  uptimeProbesSuccess  Int      @default(1)
+  uptimeProbesTotal    Int      @default(1)
+  coveragePercent      Float    @default(100.0) // Sample completeness
+  
+  resource             Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([resourceId, timestamp])
 }
+
+// ---------------------------------------------------------------------------
+// Recommendations & Governance Policies
+// ---------------------------------------------------------------------------
 
 model ScalingRecommendation {
   id                  String   @id @default(uuid())
   resourceId          String
-  resource            Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
-  type                String   // "SCALE_UP" | "SCALE_DOWN" | "RIGHTSIZE" | "RESERVED_INSTANCE"
-  reason              String
+  type                String   // "SCALE_UP", "SCALE_DOWN", "RIGHTSIZE", "IDLE_CLEANUP"
+  basisMethod         String   @default("RULE_BASED") // "RULE_BASED", "STATISTICAL", "FORECAST_ASSISTED"
+  reason              String   // Plain-language operational rationale
+  evidenceWindow      String   // JSON string: { "windowMinutes": 10, "trafficDelta": 34, "cpuAvg": 82 }
+  evidenceQuality     String   @default("HIGH") // "HIGH", "MODERATE", "INSUFFICIENT"
+  
   currentCapacity     Int
   recommendedCapacity Int
-  estimatedCostChange Float    // negative = savings, positive = increase
-  confidence          Float    // 0 - 100 percentage
-  status              String   @default("PENDING") // "PENDING" | "APPLIED" | "DISMISSED"
+  estimatedCostChange Float    // Monthly difference (+ for increase, - for savings)
+  remainingPeriodDelta Float   @default(0.0) // Incremental impact on active billing period
+  
+  confidence          Float    // 0.0 to 100.0 percentage
+  urgency             String   @default("MEDIUM") // "CRITICAL", "HIGH", "MEDIUM", "LOW"
+  status              String   @default("ACTIVE") // "ACTIVE", "SNOOZED", "DISMISSED", "EXPIRED", "APPLIED"
+  snoozedUntil        DateTime?
+  dismissReason       String?
+  expiresAt           DateTime
   createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  resource            Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
 }
+
+model Policy {
+  id                  String    @id @default(uuid())
+  workspaceId         String
+  name                String
+  scopeType           String    @default("WORKSPACE") // "WORKSPACE", "ACCOUNT", "ENVIRONMENT", "SERVICE", "RESOURCE"
+  scopeTargetId       String?   // ID of the target service, resource, or environment name
+  
+  // Guardrails
+  minInstanceCount    Int       @default(1)
+  maxInstanceCount    Int       @default(10)
+  maxStepSize         Int       @default(2) // Max replicas allowed per single scaling operation
+  cooldownMinutes     Int       @default(5) // Cooldown period before another action can occur
+  allowedActions      String    @default("SCALE_UP,SCALE_DOWN,RESTART") // Comma-separated list
+  
+  // Approval Constraints
+  requireApproval     Boolean   @default(true)
+  requireSeparateAdmin Boolean  @default(true) // Requester cannot approve their own change
+  
+  // Budget Linking
+  linkedBudgetId      String?
+  enabled             Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  linkedBudget        Budget?   @relation(fields: [linkedBudgetId], references: [id], onDelete: SetNull)
+}
+
+// ---------------------------------------------------------------------------
+// Changes, Approvals & Operations Execution
+// ---------------------------------------------------------------------------
+
+model ChangeRequest {
+  id                   String            @id @default(uuid())
+  workspaceId          String
+  requesterId          String
+  approverId           String?
+  serviceId            String?
+  resourceId           String
+  
+  actionType           String            // "SCALE_CAPACITY", "RESTART_SERVICE"
+  source               String            @default("MANUAL") // "MANUAL", "RECOMMENDATION", "COPILOT_DRAFT"
+  sourceRecommendationId String?
+  
+  // Versioning & Snapshot
+  targetVersion        Int               // Resource version at preview time (optimistic lock)
+  currentAllocation    Int
+  proposedAllocation   Int
+  
+  // Financial Snapshot (Evaluated deterministically at preview creation)
+  monthlyRateDelta     Float             // Monthly run-rate difference
+  periodCostDelta      Float             // Remaining billing period impact
+  budgetHeadroomAfter  Float             // Remaining headroom after change
+  pricingBasisHours    Int               @default(730)
+  remainingPeriodHours Int               @default(365)
+  currency             String            @default("INR")
+  
+  // Policy & Approval Verification
+  policyChecksJson     String            // JSON: { "capacityPass": true, "budgetPass": true, "cooldownPass": true }
+  status               String            @default("AWAITING_APPROVAL") // "AWAITING_APPROVAL", "APPROVED", "REJECTED", "EXPIRED", "CANCELLED"
+  changeNote           String?
+  rejectionReason      String?
+  previewExpiresAt     DateTime          // Executable preview valid for 5 minutes
+  
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  workspace            Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  requester            User              @relation("RequesterRelation", fields: [requesterId], references: [id], onDelete: Restrict)
+  approver             User?             @relation("ApproverRelation", fields: [approverId], references: [id], onDelete: SetNull)
+  service              Service?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  resource             Resource          @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  operation            ChangeOperation?
+}
+
+model ChangeOperation {
+  id                  String        @id @default(uuid())
+  changeRequestId     String        @unique
+  idempotencyKey      String        @unique
+  status              String        @default("QUEUED") // "QUEUED", "RUNNING", "RECONCILING", "SUCCEEDED", "FAILED", "CANCELLED"
+  
+  // Provider Execution Audit
+  providerOperationId String?       // Provider's task or activity ID (e.g. AWS AutoScaling ActivityId)
+  observedBeforeState String?       // JSON snapshot of resource prior to mutation
+  observedAfterState  String?       // JSON snapshot of resource after provider confirmation
+  failureDetails      String?       // Human-readable failure diagnostics
+  retryCount          Int           @default(0)
+  
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  changeRequest       ChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Costs, Budgets & Financial Accountability
+// ---------------------------------------------------------------------------
 
 model CostRecord {
   id             String       @id @default(uuid())
   cloudAccountId String
+  service        String       // "EC2", "RDS", "S3", "Egress"
+  environment    String?      // "PRODUCTION", "STAGING"
+  date           DateTime     // Incurred billing date
+  cost           Float        // Incurred monetary amount
+  currency       String       @default("INR")
+  usageQuantity  Float?
+  usageUnit      String?      // "GB-month", "Hours"
+  isFinalized    Boolean      @default(false) // Finalized invoice vs interim reported usage
+  isUnattributed Boolean      @default(false) // Costs without service tags
+
   cloudAccount   CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
-  service        String
-  date           DateTime
-  cost           Float
-  usage          String
+
+  @@index([cloudAccountId, date])
+}
+
+model Budget {
+  id                  String    @id @default(uuid())
+  workspaceId         String
+  name                String
+  period              String    @default("MONTHLY") // "MONTHLY", "QUARTERLY"
+  amount              Float     // Hard limit
+  currency            String    @default("INR")
+  warningThresholdPct Float     @default(80.0) // Alert at 80%
+  hardEnforce         Boolean   @default(true) // Block changes that exceed budget
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  linkedPolicies      Policy[]
+}
+
+// ---------------------------------------------------------------------------
+// AI Copilot, Conversations & Verifiable Citations
+// ---------------------------------------------------------------------------
+
+model CopilotThread {
+  id          String           @id @default(uuid())
+  workspaceId String
+  userId      String
+  title       String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    CopilotMessage[]
+}
+
+model CopilotMessage {
+  id              String            @id @default(uuid())
+  threadId        String
+  role            String            // "USER", "ASSISTANT", "SYSTEM"
+  content         String            // Markdown formatted response text
+  structuredDraft String?           // Optional JSON draft for ChangeReview flow
+  
+  // Model Telemetry & Audit
+  modelIdentifier String?           // "gemini-2.0-flash", "claude-3-5-sonnet"
+  tokensPrompt    Int               @default(0)
+  tokensCompletion Int              @default(0)
+  estimatedCost   Float             @default(0.0) // In USD
+  createdAt       DateTime          @default(now())
+
+  thread          CopilotThread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  citations       CopilotCitation[]
+}
+
+model CopilotCitation {
+  id               String         @id @default(uuid())
+  messageId        String
+  citationNumber   Int            // [1], [2], etc.
+  sourceType       String         // "METRIC_WINDOW", "PRICING_CATALOG", "POLICY_RULE", "AUDIT_RECORD", "DOCUMENT"
+  referenceId      String         // ID of the referenced DB record
+  label            String         // Display label (e.g. "Traffic & CPU Window (10m)")
+  snapshotJson     String         // Immutable JSON capture of the data evaluated
+  createdAt        DateTime       @default(now())
+
+  message          CopilotMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Runbooks, Documents & Notifications
+// ---------------------------------------------------------------------------
+
+model KnowledgeDocument {
+  id          String    @id @default(uuid())
+  workspaceId String
+  title       String
+  category    String    // "RUNBOOK", "POST_MORTEM", "ARCHITECTURE_DOC"
+  content     String
+  version     Int       @default(1)
+  embeddingId String?   // Vector index reference
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id          String    @id @default(uuid())
+  workspaceId String
+  userId      String?   // Nullable for workspace-wide broadcasts
+  severity    String    @default("INFO") // "INFO", "WARNING", "CRITICAL", "SUCCESS"
+  title       String
+  message     String
+  linkUrl     String?
+  isRead      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model AuditLog {
-  id         String   @id @default(uuid())
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action     String   // "SCALE_RESOURCE" | "TOGGLE_POLICY" | "CREATE_POLICY" | "UPDATE_RESOURCE" | "USER_LOGIN"
-  resourceId String?
-  details    String   // JSON string details or descriptive summary
-  createdAt  DateTime @default(now())
-}
+  id          String    @id @default(uuid())
+  workspaceId String?
+  userId      String?
+  action      String    // e.g. "SCALE_RESOURCE", "APPROVE_CHANGE", "CREATE_POLICY", "USER_LOGIN"
+  targetType  String?   // "RESOURCE", "POLICY", "BUDGET", "WORKSPACE"
+  targetId    String?
+  source      String    @default("MANUAL") // "MANUAL", "RECOMMENDATION", "COPILOT_DRAFT"
+  details     String    // JSON string describing the event diff and context
+  ipAddress   String?
+  outcome     String    @default("SUCCESS") // "SUCCESS", "FAILURE", "BLOCKED"
+  createdAt   DateTime  @default(now())
 
-model Policy {
-  id               String   @id @default(uuid())
-  name             String
-  maxInstanceCount Int
-  maxMonthlyBudget Float
-  requireApproval  Boolean  @default(true)
-  enabled          Boolean  @default(true)
-  createdAt        DateTime @default(now())
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
