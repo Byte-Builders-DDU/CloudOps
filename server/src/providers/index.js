@@ -4,62 +4,84 @@ import { AzureCloudProvider } from './AzureCloudProvider.js';
 import { GCPCloudProvider } from './GCPCloudProvider.js';
 
 /**
- * Provider Registry — Environment-Driven Hot-Switch (Phase 2)
+ * Provider Registry — Environment-Driven Hot-Switch (Phase 3)
  *
  * The active cloud provider is determined at startup by the CLOUD_PROVIDER
- * environment variable (default: MockCloud).
+ * environment variable (default: MockCloud). All three live providers gracefully
+ * fall back to MockCloudProvider if their credentials are absent, ensuring
+ * teammates without cloud access are never blocked.
  *
  * Supported values:
  *   MockCloud — Simulation engine (safe default, no credentials required)
- *   AWS       — Live AWS SDK integration (requires AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY)
- *   Azure     — Stub (Phase 3)
- *   GCP       — Stub (Phase 3)
+ *   AWS       — Live AWS SDK: Auto Scaling + CloudWatch + STS AssumeRole
+ *   Azure     — Live Azure SDK: VMSS + Azure Monitor (Service Principal)
+ *   GCP       — Live GCP SDK: MIG + Cloud Monitoring (Service Account / ADC)
  *
  * Usage in .env:
  *   CLOUD_PROVIDER=MockCloud   # Default — no credentials needed
  *   CLOUD_PROVIDER=AWS         # Activate live AWS provider
+ *   CLOUD_PROVIDER=Azure       # Activate live Azure provider
+ *   CLOUD_PROVIDER=GCP         # Activate live GCP provider
  */
 
-// Build provider instances
+// Build provider instances (credentials resolved lazily from env on first call)
 const mockProvider = new MockCloudProvider();
 
 const providerRegistry = {
   MockCloud: mockProvider,
   AWS: new AWSCloudProvider({
-    region: process.env.AWS_REGION || 'us-east-1',
-    roleArn: process.env.AWS_ROLE_ARN || null,
+    region:     process.env.AWS_REGION     || 'us-east-1',
+    roleArn:    process.env.AWS_ROLE_ARN   || null,
     externalId: process.env.AWS_EXTERNAL_ID || null,
   }),
-  Azure: new AzureCloudProvider(),
-  GCP: new GCPCloudProvider(),
+  Azure: new AzureCloudProvider({
+    subscriptionId: process.env.AZURE_SUBSCRIPTION_ID || null,
+    tenantId:       process.env.AZURE_TENANT_ID       || null,
+    clientId:       process.env.AZURE_CLIENT_ID       || null,
+    clientSecret:   process.env.AZURE_CLIENT_SECRET   || null,
+  }),
+  GCP: new GCPCloudProvider({
+    projectId:   process.env.GCP_PROJECT_ID               || null,
+    keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS || null,
+  }),
 };
 
-// Resolve the active provider from environment at startup
+// Resolve the active provider from the environment at startup
 const requestedProvider = process.env.CLOUD_PROVIDER || 'MockCloud';
-const hasAwsCredentials = !!(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+
+// Credential presence checks per provider
+const credentialChecks = {
+  AWS:   !!(process.env.AWS_ACCESS_KEY_ID   && process.env.AWS_SECRET_ACCESS_KEY),
+  Azure: !!(process.env.AZURE_CLIENT_ID     && process.env.AZURE_CLIENT_SECRET && process.env.AZURE_SUBSCRIPTION_ID),
+  GCP:   !!(process.env.GCP_PROJECT_ID),
+};
 
 let activeProvider;
-if (requestedProvider === 'AWS') {
-  if (!hasAwsCredentials) {
+
+if (['AWS', 'Azure', 'GCP'].includes(requestedProvider)) {
+  if (!credentialChecks[requestedProvider]) {
+    // Missing credentials — warn and fall back to Mock so server keeps running
     console.warn(
-      '[Provider] ⚠️  CLOUD_PROVIDER=AWS is set but AWS credentials are missing. ' +
-      'Falling back to MockCloudProvider. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in .env.'
+      `[Provider] ⚠️  CLOUD_PROVIDER=${requestedProvider} is set but required credentials are missing. ` +
+      `Falling back to MockCloudProvider. Check your .env file for the required vars.`
     );
     activeProvider = mockProvider;
   } else {
-    activeProvider = providerRegistry['AWS'];
-    console.log(`[Provider] ✅ Active: AWSCloudProvider (${process.env.AWS_REGION || 'us-east-1'})`);
+    activeProvider = providerRegistry[requestedProvider];
+    const regionHint = process.env.AWS_REGION || process.env.AZURE_SUBSCRIPTION_ID?.slice(0, 8) || process.env.GCP_PROJECT_ID || '';
+    console.log(`[Provider] ✅ Active: ${activeProvider.providerName}CloudProvider (${regionHint})`);
   }
 } else {
-  activeProvider = providerRegistry[requestedProvider] || mockProvider;
-  console.log(`[Provider] ✅ Active: ${activeProvider.providerName} (simulation mode)`);
+  // MockCloud or unknown — always safe
+  activeProvider = mockProvider;
+  console.log(`[Provider] ✅ Active: MockCloudProvider (simulation mode)`);
 }
 
 /**
  * Get the currently active CloudProvider instance.
- * Routes to the env-configured provider, or falls back to MockCloud.
+ * Pass a providerName to explicitly override for a single call (e.g. tests).
  *
- * @param {string} [providerName] - Override provider by name ('MockCloud'|'AWS'|'Azure'|'GCP')
+ * @param {string} [providerName] - 'MockCloud' | 'AWS' | 'Azure' | 'GCP'
  * @returns {CloudProvider}
  */
 export function getCloudProvider(providerName) {
