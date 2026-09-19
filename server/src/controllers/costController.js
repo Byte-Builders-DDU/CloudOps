@@ -176,9 +176,12 @@ export async function getBudgetStatus(req, res, next) {
     }) || {
       id: null,
       workspaceId,
+      name: 'Primary Workspace Budget',
+      period: 'MONTHLY',
       amount: 200000,
       currency: 'INR',
-      thresholdAlert: 80,
+      warningThresholdPct: 80.0,
+      hardEnforce: true,
     };
 
     const costSum = await prisma.costRecord.aggregate({
@@ -196,7 +199,7 @@ export async function getBudgetStatus(req, res, next) {
         currentSpent: Math.round(currentSpent),
         headroom: Math.max(0, budget.amount - currentSpent),
         percentageUsed,
-        isAlertTriggered: percentageUsed >= (budget.thresholdAlert || 80),
+        isAlertTriggered: percentageUsed >= (budget.warningThresholdPct || 80),
       },
     });
   } catch (error) {
@@ -210,7 +213,7 @@ export async function getBudgetStatus(req, res, next) {
 export async function updateBudget(req, res, next) {
   try {
     const workspaceId = req.workspaceId;
-    const { amount, currency = 'INR', thresholdAlert = 80 } = req.body;
+    const { amount, currency = 'INR', warningThresholdPct = 80, name = 'Primary Workspace Budget', period = 'MONTHLY', hardEnforce = true } = req.body;
 
     if (!amount || amount <= 0) {
       return res.status(400).json({
@@ -230,16 +233,20 @@ export async function updateBudget(req, res, next) {
         data: {
           amount: parseFloat(amount),
           currency,
-          thresholdAlert: parseInt(thresholdAlert, 10),
+          warningThresholdPct: parseFloat(warningThresholdPct),
+          hardEnforce: Boolean(hardEnforce),
         },
       });
     } else {
       budget = await prisma.budget.create({
         data: {
           workspaceId,
+          name,
+          period,
           amount: parseFloat(amount),
           currency,
-          thresholdAlert: parseInt(thresholdAlert, 10),
+          warningThresholdPct: parseFloat(warningThresholdPct),
+          hardEnforce: Boolean(hardEnforce),
         },
       });
     }
