@@ -1,0 +1,105 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String     @id @default(uuid())
+  name      String
+  email     String     @unique
+  password  String
+  role      String     @default("VIEWER") // "ADMIN" | "OPERATOR" | "VIEWER"
+  createdAt DateTime   @default(now())
+  auditLogs AuditLog[]
+}
+
+model CloudAccount {
+  id          String       @id @default(uuid())
+  provider    String       // "AWS" | "Azure" | "GCP"
+  accountName String
+  region      String
+  status      String       @default("ACTIVE") // "ACTIVE" | "WARNING" | "ERROR"
+  createdAt   DateTime     @default(now())
+  resources   Resource[]
+  costRecords CostRecord[]
+}
+
+model Resource {
+  id                     String                  @id @default(uuid())
+  cloudAccountId         String
+  cloudAccount           CloudAccount            @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  name                   String
+  type                   String                  // "Compute" | "Database" | "Storage" | "Cache" | "Serverless"
+  service                String                  // e.g. "EC2", "RDS", "S3", "ElastiCache", "AKS", "BigQuery"
+  region                 String                  // "Mumbai", "Singapore", "East US", "Frankfurt"
+  status                 String                  @default("RUNNING") // "RUNNING" | "STOPPED" | "DEGRADED" | "SCALING"
+  cpu                    Float                   // vCPU count
+  memory                 Float                   // RAM in GB
+  storage                Float                   // Storage in GB
+  instanceCount          Int                     @default(1)
+  monthlyCost            Float
+  createdAt              DateTime                @default(now())
+  metrics                Metric[]
+  scalingRecommendations ScalingRecommendation[]
+}
+
+model Metric {
+  id          String   @id @default(uuid())
+  resourceId  String
+  resource    Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  timestamp   DateTime @default(now())
+  cpuUsage    Float    // percentage 0-100
+  memoryUsage Float    // percentage 0-100
+  networkIn   Float    // MB/s
+  networkOut  Float    // MB/s
+  latency     Float    // ms
+  requests    Int      // req/min
+}
+
+model ScalingRecommendation {
+  id                  String   @id @default(uuid())
+  resourceId          String
+  resource            Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  type                String   // "SCALE_UP" | "SCALE_DOWN" | "RIGHTSIZE" | "RESERVED_INSTANCE"
+  reason              String
+  currentCapacity     Int
+  recommendedCapacity Int
+  estimatedCostChange Float    // negative = savings, positive = increase
+  confidence          Float    // 0 - 100 percentage
+  status              String   @default("PENDING") // "PENDING" | "APPLIED" | "DISMISSED"
+  createdAt           DateTime @default(now())
+}
+
+model CostRecord {
+  id             String       @id @default(uuid())
+  cloudAccountId String
+  cloudAccount   CloudAccount @relation(fields: [cloudAccountId], references: [id], onDelete: Cascade)
+  service        String
+  date           DateTime
+  cost           Float
+  usage          String
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String   // "SCALE_RESOURCE" | "TOGGLE_POLICY" | "CREATE_POLICY" | "UPDATE_RESOURCE" | "USER_LOGIN"
+  resourceId String?
+  details    String   // JSON string details or descriptive summary
+  createdAt  DateTime @default(now())
+}
+
+model Policy {
+  id               String   @id @default(uuid())
+  name             String
+  maxInstanceCount Int
+  maxMonthlyBudget Float
+  requireApproval  Boolean  @default(true)
+  enabled          Boolean  @default(true)
+  createdAt        DateTime @default(now())
+}
