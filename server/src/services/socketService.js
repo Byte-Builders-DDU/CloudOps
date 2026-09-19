@@ -1,10 +1,9 @@
 import { Server } from 'socket.io';
 import prisma from '../models/prisma.js';
-import { MockCloudProvider } from '../providers/MockCloudProvider.js';
+import { getCloudProvider } from '../providers/index.js';
 
 let ioInstance = null;
 let telemetryInterval = null;
-const mockProvider = new MockCloudProvider();
 
 export function initializeSocket(httpServer, corsOptions) {
   ioInstance = new Server(httpServer, {
@@ -39,7 +38,7 @@ export function initializeSocket(httpServer, corsOptions) {
     });
   });
 
-  // Start background live telemetry simulation pulse (every 5 seconds)
+  // Start background live telemetry simulation pulse (every 10 seconds)
   startLiveTelemetrySimulation();
 
   return ioInstance;
@@ -87,8 +86,8 @@ function startLiveTelemetrySimulation() {
 
       if (resources.length === 0) return;
 
-      // Generate realistic metrics and inject Journey A surge
-      const liveUpdates = await mockProvider.generateLiveTelemetry(resources);
+      // Generate live telemetry via the active cloud provider (MockCloud / AWS / Azure / GCP)
+      const liveUpdates = await getCloudProvider().generateLiveTelemetry(resources);
 
       // Group updates by workspace for multiplexing
       const updatesByWorkspace = {};
@@ -122,5 +121,5 @@ function startLiveTelemetrySimulation() {
     } catch (err) {
       console.error("Telemetry simulation error:", err);
     }
-  }, 10000); // 10-second samples (Task 1.3 requirement)
+  }, 10000); // 10-second samples as required by PRD FR-04 / Task 1.3
 }

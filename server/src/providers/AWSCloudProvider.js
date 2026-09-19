@@ -194,9 +194,10 @@ export class AWSCloudProvider extends CloudProvider {
   }
 
   /**
-   * Get a single ASG resource by its ARN (used as ID).
+   * Get a single ASG resource by its ARN or name.
+   * Fetches the specific ASG by name to avoid pulling all groups.
    *
-   * @param {string} id - ASG ARN
+   * @param {string} id - ASG ARN or name
    * @returns {Promise<Object|null>} Resource or null
    */
   async getResourceById(id) {
@@ -204,11 +205,17 @@ export class AWSCloudProvider extends CloudProvider {
     const credentials = await this._getCredentials();
     const client = new AutoScalingClient({ region: this.region, credentials });
 
+    // Extract the ASG name from an ARN if a full ARN was passed
+    // ARN format: arn:aws:autoscaling:<region>:<account>:autoScalingGroup:...:autoScalingGroupName/<name>
+    const asgName = id.includes('autoScalingGroupName/')
+      ? id.split('autoScalingGroupName/').pop()
+      : id;
+
     const response = await client.send(
-      new DescribeAutoScalingGroupsCommand({ AutoScalingGroupNames: [] })
+      new DescribeAutoScalingGroupsCommand({ AutoScalingGroupNames: [asgName] })
     );
 
-    const asg = (response.AutoScalingGroups || []).find(g => g.AutoScalingGroupARN === id);
+    const asg = (response.AutoScalingGroups || [])[0];
     if (!asg) return null;
 
     return {

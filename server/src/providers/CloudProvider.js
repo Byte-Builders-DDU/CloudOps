@@ -68,4 +68,14 @@ export class CloudProvider {
   async getServiceHealth() {
     throw new Error("Method getServiceHealth() must be implemented.");
   }
+
+  /**
+   * Generate a live telemetry snapshot for the given resources and persist to DB.
+   * Called every 10 seconds by socketService.js for all provider implementations.
+   * @param {Array} resources - Array of Prisma Resource objects (status: RUNNING)
+   * @returns {Promise<Array>} Array of live metric payloads
+   */
+  async generateLiveTelemetry(resources) {
+    throw new Error("Method generateLiveTelemetry() must be implemented.");
+  }
 }

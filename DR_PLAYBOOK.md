@@ -107,7 +107,8 @@ node server/restore_validate.js
 node server/restore_validate.js
 
 # Run provider tests
-cd server && node test_provider.js
+cd server && node test_aws_provider.js
+cd server && node test_multicloud.js
 ```
 
 ### Step 5: Restart the Server (~5 min)
