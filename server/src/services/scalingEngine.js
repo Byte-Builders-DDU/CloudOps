@@ -82,7 +82,7 @@ export async function evaluateScalingImpact({
       enabled: true,
       OR: [
         { scopeType: 'WORKSPACE' },
-        { scopeType: 'SERVICE', scopeTargetId: resource.serviceId },
+        ...(resource.serviceId ? [{ scopeType: 'SERVICE', scopeTargetId: resource.serviceId }] : []),
         { scopeType: 'RESOURCE', scopeTargetId: resource.id },
       ],
     },
@@ -97,8 +97,8 @@ export async function evaluateScalingImpact({
   let requireSeparateAdmin = true;
 
   if (policies.length > 0) {
-    minAllowed = Math.max(...policies.map(p => p.minInstanceCount));
-    maxAllowed = Math.min(...policies.map(p => p.maxInstanceCount));
+    minAllowed = Math.max(...policies.map(p => p.minInstanceCount), resource.minInstances || 1);
+    maxAllowed = Math.min(...policies.map(p => p.maxInstanceCount), resource.maxInstances || 10);
     maxStep = Math.min(...policies.map(p => p.maxStepSize));
     cooldownMinutes = Math.max(...policies.map(p => p.cooldownMinutes));
     requireApproval = policies.some(p => p.requireApproval);
@@ -109,7 +109,7 @@ export async function evaluateScalingImpact({
   const recentOp = await prisma.changeRequest.findFirst({
     where: {
       resourceId,
-      status: 'APPROVED',
+      status: { in: ['APPROVED', 'APPLIED', 'IN_PROGRESS'] },
       updatedAt: {
         gte: new Date(Date.now() - cooldownMinutes * 60 * 1000),
       },
@@ -123,7 +123,7 @@ export async function evaluateScalingImpact({
   // Check approval rules
   // If user is OPERATOR, approval is always required
   // If user is ADMIN and requireSeparateAdmin is true, self-approval is prevented
-  const isAwaitingSeparateApprover = userRole === 'ADMIN' && requireSeparateAdmin;
+  const isAwaitingSeparateApprover = requireApproval && (userRole === 'ADMIN' ? requireSeparateAdmin : true);
 
   const validationErrors = [];
   if (!capacityPass) {
