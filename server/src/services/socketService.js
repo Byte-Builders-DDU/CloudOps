@@ -1,8 +1,10 @@
 import { Server } from 'socket.io';
 import prisma from '../models/prisma.js';
+import { MockCloudProvider } from '../providers/MockCloudProvider.js';
 
 let ioInstance = null;
 let telemetryInterval = null;
+const mockProvider = new MockCloudProvider();
 
 export function initializeSocket(httpServer, corsOptions) {
   ioInstance = new Server(httpServer, {
@@ -21,6 +23,15 @@ export function initializeSocket(httpServer, corsOptions) {
 
     socket.on('unsubscribe:resource', (resourceId) => {
       socket.leave(`resource:${resourceId}`);
+    });
+
+    socket.on('subscribe:workspace:metrics', (workspaceId) => {
+      socket.join(`workspace:${workspaceId}:metrics`);
+      console.log(`📡 Socket ${socket.id} subscribed to workspace ${workspaceId} metrics`);
+    });
+
+    socket.on('unsubscribe:workspace:metrics', (workspaceId) => {
+      socket.leave(`workspace:${workspaceId}:metrics`);
     });
 
     socket.on('disconnect', () => {
@@ -71,41 +82,45 @@ function startLiveTelemetrySimulation() {
 
       const resources = await prisma.resource.findMany({
         where: { status: 'RUNNING' },
-        take: 6,
+        include: { cloudAccount: true }
       });
 
-      const liveUpdates = [];
+      if (resources.length === 0) return;
 
-      for (const res of resources) {
-        const noiseCpu = (Math.random() - 0.5) * 6;
-        const noiseMem = (Math.random() - 0.5) * 3;
-        const noiseLat = (Math.random() - 0.5) * 5;
+      // Generate realistic metrics and inject Journey A surge
+      const liveUpdates = await mockProvider.generateLiveTelemetry(resources);
 
-        const cpu = Math.min(98, Math.max(10, Math.round((55 + noiseCpu) * 10) / 10));
-        const mem = Math.min(95, Math.max(20, Math.round((60 + noiseMem) * 10) / 10));
-        const lat = Math.max(5, Math.round((30 + noiseLat) * 10) / 10);
-        const reqs = Math.max(100, Math.round(2000 + Math.random() * 800));
+      // Group updates by workspace for multiplexing
+      const updatesByWorkspace = {};
 
-        const updatePayload = {
-          resourceId: res.id,
-          name: res.name,
-          timestamp: new Date().toISOString(),
-          cpuUsage: cpu,
-          memoryUsage: mem,
-          latency: lat,
-          requests: reqs,
-        };
+      for (const update of liveUpdates) {
+        const resource = resources.find(r => r.id === update.resourceId);
+        if (!resource) continue;
 
-        liveUpdates.push(updatePayload);
-        ioInstance.to(`resource:${res.id}`).emit('metric:live', updatePayload);
+        const workspaceId = resource.cloudAccount.workspaceId;
+        if (!updatesByWorkspace[workspaceId]) {
+          updatesByWorkspace[workspaceId] = [];
+        }
+
+        // Payload validation (Task 1.3 requirement)
+        if (update.cpuUsage !== undefined && update.memoryUsage !== undefined) {
+          update.name = resource.name;
+          updatesByWorkspace[workspaceId].push(update);
+          // Broadcast to specific resource room
+          ioInstance.to(`resource:${resource.id}`).emit('metric:live', update);
+        }
       }
 
-      ioInstance.emit('metrics:live_tick', {
-        timestamp: new Date().toISOString(),
-        updates: liveUpdates,
-      });
+      // Broadcast to workspace multiplexed rooms
+      for (const [workspaceId, updates] of Object.entries(updatesByWorkspace)) {
+        ioInstance.to(`workspace:${workspaceId}:metrics`).emit('metrics:live_tick', {
+          timestamp: new Date().toISOString(),
+          updates,
+        });
+      }
+
     } catch (err) {
-      // Ignore background simulation errors during startup/shutdown
+      console.error("Telemetry simulation error:", err);
     }
-  }, 5000);
+  }, 10000); // 10-second samples (Task 1.3 requirement)
 }

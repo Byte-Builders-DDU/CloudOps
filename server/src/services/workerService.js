@@ -91,6 +91,53 @@ async function processQueuedOperations() {
   }
 
   if (pendingOperation.status === 'RECONCILING') {
+    // Increment retry count to track duration in RECONCILING state
+    const newRetryCount = pendingOperation.retryCount + 1;
+    
+    // Simulate a provider timeout / rollback scenario
+    // E.g. 10% chance of a simulated failure, or if we've retried too many times (timeout)
+    const isTimeoutSimulation = Math.random() < 0.1 || newRetryCount > 5;
+
+    if (isTimeoutSimulation) {
+      // Execute Rollback
+      const observedBefore = pendingOperation.observedBeforeState 
+        ? JSON.parse(pendingOperation.observedBeforeState) 
+        : { instanceCount: resource.instanceCount, monthlyCost: resource.monthlyCost };
+
+      await prisma.resource.update({
+        where: { id: resource.id },
+        data: {
+          status: 'RUNNING', // Revert from SCALING
+        },
+      });
+
+      await prisma.changeOperation.update({
+        where: { id: pendingOperation.id },
+        data: {
+          status: 'FAILED',
+          completedAt: new Date(),
+          failureDetails: 'Simulated Provider API Timeout. Rollback initiated to maintain consistent state.',
+        },
+      });
+
+      await prisma.changeRequest.update({
+        where: { id: changeRequest.id },
+        data: { status: 'REJECTED', rejectionReason: 'Provider Timeout Rollback' },
+      });
+
+      console.warn(`⚠️ Change Operation ${pendingOperation.id} timed out. Rolled back ${resource.name}.`);
+      return;
+    }
+
+    // Otherwise, continue polling/reconciling. Wait for a few retries to simulate delay.
+    if (newRetryCount < 3) {
+      await prisma.changeOperation.update({
+        where: { id: pendingOperation.id },
+        data: { retryCount: newRetryCount },
+      });
+      return;
+    }
+
     // Confirm desired state with provider and transition to SUCCEEDED
     const newCount = changeRequest.proposedAllocation;
     const unitRate = resource.hourlyRate > 0 ? resource.hourlyRate : (resource.monthlyCost / (730 * (resource.instanceCount || 1)));

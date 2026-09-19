@@ -273,6 +273,88 @@ export class MockCloudProvider extends CloudProvider {
   }
 
   /**
+   * Generate live diurnal telemetry and inject Journey A surge
+   */
+  async generateLiveTelemetry(resources) {
+    const liveUpdates = [];
+    const now = new Date();
+    const hour = now.getHours() + now.getMinutes() / 60;
+    
+    // Diurnal cycle: peaks around hour 14 (2 PM)
+    const diurnalFactor = (Math.sin((hour - 8) * Math.PI / 12) + 1) / 2; // 0.0 to 1.0
+
+    for (const res of resources) {
+      // Base generation based on resource type
+      let baseCpu = 20 + diurnalFactor * 40; // 20% to 60%
+      let baseMem = 40 + diurnalFactor * 20; // 40% to 60%
+      let baseReq = 5000 + diurnalFactor * 10000;
+      let baseLat = 40 + diurnalFactor * 20;
+      let errorRate = 0.005 + diurnalFactor * 0.01;
+
+      // Add random noise
+      baseCpu += (Math.random() - 0.5) * 5;
+      baseMem += (Math.random() - 0.5) * 5;
+      baseReq += (Math.random() - 0.5) * 500;
+      baseLat += (Math.random() - 0.5) * 5;
+
+      // Inject Journey A surge scenario on api-asg
+      if (res.name === 'api-asg' || res.name === 'prod-api') {
+        baseCpu = 82.0 + (Math.random() * 3 - 1.5); // Fixed around 82%
+        baseReq = 18000 * 1.34; // +34% traffic (24,120)
+        baseLat = 142.0 + (Math.random() * 10 - 5);
+        errorRate = 0.05;
+      }
+
+      // Cap bounds
+      const cpuUsage = Math.max(1, Math.min(100, Math.round(baseCpu * 10) / 10));
+      const memoryUsage = Math.max(1, Math.min(100, Math.round(baseMem * 10) / 10));
+      const latency = Math.max(5, Math.round(baseLat * 10) / 10);
+      const requests = Math.round(Math.max(10, baseReq));
+
+      const updatePayload = {
+        resourceId: res.id,
+        timestamp: now.toISOString(),
+        cpuUsage,
+        memoryUsage,
+        networkIn: Math.round((requests / 1000) * 2 * 10) / 10,
+        networkOut: Math.round((requests / 1000) * 4 * 10) / 10,
+        latency,
+        latencyP95: Math.round(latency * 1.2 * 10) / 10,
+        requests,
+        errorRate: Math.round(errorRate * 1000) / 1000,
+        uptimeProbesSuccess: 60,
+        uptimeProbesTotal: 60,
+        coveragePercent: 100.0
+      };
+
+      liveUpdates.push(updatePayload);
+    }
+
+    // Persist to database so historical queries reflect the live simulation
+    if (liveUpdates.length > 0) {
+      await prisma.metric.createMany({
+        data: liveUpdates.map(u => ({
+          resourceId: u.resourceId,
+          timestamp: new Date(u.timestamp),
+          cpuUsage: u.cpuUsage,
+          memoryUsage: u.memoryUsage,
+          networkIn: u.networkIn,
+          networkOut: u.networkOut,
+          latency: u.latency,
+          latencyP95: u.latencyP95,
+          requests: u.requests,
+          errorRate: u.errorRate,
+          uptimeProbesSuccess: u.uptimeProbesSuccess,
+          uptimeProbesTotal: u.uptimeProbesTotal,
+          coveragePercent: u.coveragePercent
+        }))
+      });
+    }
+
+    return liveUpdates;
+  }
+
+  /**
    * Calculate aggregated health status across cloud infrastructure
    */
   async getServiceHealth() {
