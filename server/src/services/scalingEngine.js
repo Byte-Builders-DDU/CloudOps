@@ -145,6 +145,7 @@ export async function evaluateScalingImpact({
   return {
     resource: {
       id: resource.id,
+      serviceId: resource.serviceId,
       name: resource.name,
       serviceName: resource.logicalService?.name || resource.service,
       environment: resource.logicalService?.environment || 'PRODUCTION',
