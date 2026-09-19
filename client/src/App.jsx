@@ -8,6 +8,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
 import { Resources } from './pages/Resources';
+import { ResourceDetail } from './pages/ResourceDetail';
 import { Monitoring } from './pages/Monitoring';
 import { Scaling } from './pages/Scaling';
 import { Costs } from './pages/Costs';
@@ -30,6 +31,7 @@ export function App() {
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/resources" element={<Resources />} />
+              <Route path="/resources/:id" element={<ResourceDetail />} />
               <Route path="/monitoring" element={<Monitoring />} />
               <Route path="/scaling" element={<Scaling />} />
               <Route path="/costs" element={<Costs />} />

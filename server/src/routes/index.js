@@ -7,10 +7,12 @@ import costRoutes from './costRoutes.js';
 import policyRoutes from './policyRoutes.js';
 import auditRoutes from './auditRoutes.js';
 import accountRoutes from './accountRoutes.js';
+import dashboardRoutes from './dashboardRoutes.js';
 
 const router = Router();
 
 router.use('/auth', authRoutes);
+router.use('/dashboard', dashboardRoutes);
 router.use('/resources', resourceRoutes);
 router.use('/metrics', metricRoutes);
 router.use('/scaling', scalingRoutes);

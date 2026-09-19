@@ -1,14 +1,37 @@
 /**
- * Format currency amount to USD string
+ * Format currency amount with Indian Rupee (INR) default or custom currency
  */
-export function formatCurrency(amount) {
-  if (amount === undefined || amount === null || isNaN(amount)) return '$0.00';
+export function formatCurrency(amount, currency = 'INR') {
+  if (amount === undefined || amount === null || isNaN(amount)) return '₹0';
+  
+  if (currency === 'INR') {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(amount);
+  }
+
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
+    currency,
+    minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(amount);
+}
+
+/**
+ * Format large numbers compactly (e.g. 2,840,000 -> 2.84M)
+ */
+export function formatCompactNumber(num) {
+  if (num === undefined || num === null || isNaN(num)) return '0';
+  if (num >= 1000000) {
+    return `${(num / 1000000).toFixed(2)}M`;
+  }
+  if (num >= 1000) {
+    return `${(num / 1000).toFixed(1)}K`;
+  }
+  return num.toString();
 }
 
 /**
