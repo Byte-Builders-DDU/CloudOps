@@ -130,13 +130,13 @@ export async function syncAccount(req, res, next) {
       }
     }
 
-    // If AWS provider and credentials configured, probe live ASG resources
+    // If AWS provider and credentials configured, probe live resources and sync
     if (account.provider === 'AWS') {
       const awsProvider = getCloudProvider('AWS');
       if (awsProvider.hasCredentials && awsProvider.hasCredentials()) {
         try {
-          const liveResources = await awsProvider.getResources();
-          syncDetail = `Live AWS discovery reconciled ${liveResources.length} Auto Scaling Group(s).`;
+          const syncResult = await awsProvider.syncLiveResources(req.workspaceId || account.workspaceId);
+          syncDetail = `Live AWS discovery synchronized ${syncResult.resourcesCount} active resource(s) from Account ${syncResult.accountId} (${syncResult.region}).`;
         } catch (awsErr) {
           console.warn('[Sync] AWS live query warning:', awsErr.message);
         }
