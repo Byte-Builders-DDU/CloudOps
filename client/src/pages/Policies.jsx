@@ -18,7 +18,7 @@ import {
   Trash2,
   AlertTriangle,
   Server,
-  DollarSign,
+  IndianRupee,
 } from 'lucide-react';
 import { policyService } from '../services/policyService';
 
@@ -191,9 +191,8 @@ export function Policies() {
           {policies.map((policy) => (
             <Card
               key={policy.id}
-              className={`border transition-shadow ${
-                policy.enabled ? 'border-slate-300 shadow-card' : 'border-slate-200 bg-slate-50/50 opacity-75'
-              }`}
+              className={`border transition-shadow ${policy.enabled ? 'border-slate-300 shadow-card' : 'border-slate-200 bg-slate-50/50 opacity-75'
+                }`}
             >
               <div className="p-5 flex flex-col justify-between h-full space-y-4">
                 {/* Header */}
@@ -216,14 +215,12 @@ export function Policies() {
                   <button
                     onClick={() => handleToggle(policy)}
                     disabled={!isAdmin}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      policy.enabled ? 'bg-blue-600' : 'bg-slate-300'
-                    } ${!isAdmin ? 'cursor-not-allowed opacity-60' : ''}`}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${policy.enabled ? 'bg-blue-600' : 'bg-slate-300'
+                      } ${!isAdmin ? 'cursor-not-allowed opacity-60' : ''}`}
                   >
                     <span
-                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        policy.enabled ? 'translate-x-4' : 'translate-x-0'
-                      }`}
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${policy.enabled ? 'translate-x-4' : 'translate-x-0'
+                        }`}
                     />
                   </button>
                 </div>
@@ -242,7 +239,7 @@ export function Policies() {
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 text-slate-600">
-                      <DollarSign className="w-3.5 h-3.5 text-slate-400" />
+                      <IndianRupee className="w-3.5 h-3.5 text-slate-400" />
                       <span>Max Monthly Budget:</span>
                     </div>
                     <span className="font-mono font-bold text-[#0F172A]">
@@ -320,14 +317,14 @@ export function Policies() {
             />
 
             <Input
-              label="Max Monthly Budget ($)"
+              label="Max Monthly Budget (₹)"
               type="number"
               min="100"
               step="50"
               value={maxMonthlyBudget}
               onChange={(e) => setMaxMonthlyBudget(e.target.value)}
               required
-              helperText="Monthly budget cap (USD)"
+              helperText="Monthly budget cap (INR)"
             />
           </div>
 
