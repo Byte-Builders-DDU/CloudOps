@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './hooks/useAuth';
 import { CloudFilterProvider } from './hooks/useCloudFilter';
 import { DashboardLayout } from './layouts/DashboardLayout';
+import { CursorGlow } from './components/common/CursorGlow';
 
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
@@ -21,6 +22,7 @@ import { Settings } from './pages/Settings';
 export function App() {
   return (
     <BrowserRouter>
+      <CursorGlow />
       <AuthProvider>
         <CloudFilterProvider>
           <Routes>
