@@ -1,4 +1,5 @@
 import prisma from '../models/prisma.js';
+import { getCloudProvider } from '../providers/index.js';
 
 /**
  * Get list of connected cloud accounts
@@ -24,6 +25,42 @@ export async function getAccounts(req, res, next) {
 }
 
 /**
+ * Get Azure connector status and credential state
+ */
+export async function getAzureConnectorStatus(req, res, next) {
+  try {
+    const azureProvider = getCloudProvider('Azure');
+    const status = azureProvider.getAzureStatus ? azureProvider.getAzureStatus() : {
+      provider: 'Azure',
+      configured: false,
+      status: 'UNCONFIGURED',
+    };
+    return res.status(200).json({
+      success: true,
+      data: status,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Run diagnostic probe against Azure ARM API
+ */
+export async function diagnoseAzureConnector(req, res, next) {
+  try {
+    const azureProvider = getCloudProvider('Azure');
+    const result = await azureProvider.diagnoseAzureConnection();
+    return res.status(200).json({
+      success: result.success,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
  * Sync/Health check a cloud account connector
  */
 export async function syncAccount(req, res, next) {
@@ -42,6 +79,21 @@ export async function syncAccount(req, res, next) {
       });
     }
 
+    let syncDetail = `All ${account.resources.length} services up-to-date.`;
+
+    // If Azure provider and credentials configured, probe live ARM resources
+    if (account.provider === 'Azure') {
+      const azureProvider = getCloudProvider('Azure');
+      if (azureProvider.hasCredentials && azureProvider.hasCredentials()) {
+        try {
+          const liveResources = await azureProvider.getResources();
+          syncDetail = `Live Azure ARM discovery reconciled ${liveResources.length} scale set(s) and clusters.`;
+        } catch (azureErr) {
+          console.warn('[Sync] Azure live query warning:', azureErr.message);
+        }
+      }
+    }
+
     // Refresh status to ACTIVE
     const updated = await prisma.cloudAccount.update({
       where: { id },
@@ -56,13 +108,14 @@ export async function syncAccount(req, res, next) {
           accountName: account.accountName,
           provider: account.provider,
           syncedBy: req.user.name,
+          syncDetail,
         }),
       },
     });
 
     return res.status(200).json({
       success: true,
-      message: `Account "${account.accountName}" synced successfully. All ${account.resources.length} services up-to-date.`,
+      message: `Account "${account.accountName}" synced successfully. ${syncDetail}`,
       data: updated,
     });
   } catch (error) {

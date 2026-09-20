@@ -50,6 +50,13 @@ export class GCPCloudProvider extends CloudProvider {
   }
 
   /**
+   * Check if GCP credentials are configured.
+   */
+  hasCredentials() {
+    return Boolean(this.projectId && process.env.GOOGLE_APPLICATION_CREDENTIALS);
+  }
+
+  /**
    * Lazily creates and caches an InstanceGroupManagersClient (Compute).
    * Uses Application Default Credentials (ADC) or explicit keyFilename.
    * @returns {Promise<InstanceGroupManagersClient>}

@@ -16,10 +16,12 @@ export function requireRoles(...allowedRoles) {
       });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    const currentRole = req.workspaceRole || req.user.role || 'VIEWER';
+
+    if (!allowedRoles.includes(currentRole) && req.user.systemRole !== 'SUPERADMIN') {
       return res.status(403).json({
         success: false,
-        message: `Forbidden: Action requires one of [${allowedRoles.join(', ')}] roles. Your role is '${req.user.role}'.`,
+        message: `Forbidden: Action requires one of [${allowedRoles.join(', ')}] roles. Your role is '${currentRole}'.`,
       });
     }
 

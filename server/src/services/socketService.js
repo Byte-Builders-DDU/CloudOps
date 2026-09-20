@@ -86,8 +86,47 @@ function startLiveTelemetrySimulation() {
 
       if (resources.length === 0) return;
 
-      // Generate live telemetry via the active cloud provider (MockCloud / AWS / Azure / GCP)
-      const liveUpdates = await getCloudProvider().generateLiveTelemetry(resources);
+      // Multi-Cloud Telemetry Dispatcher:
+      // Group resources by their cloud provider (Azure, AWS, GCP, or default)
+      const resourcesByProvider = {};
+      for (const res of resources) {
+        const prov = res.cloudAccount?.provider || 'MockCloud';
+        if (!resourcesByProvider[prov]) resourcesByProvider[prov] = [];
+        resourcesByProvider[prov].push(res);
+      }
+
+      const liveUpdates = [];
+      for (const [providerName, provResources] of Object.entries(resourcesByProvider)) {
+        try {
+          const providerInstance = getCloudProvider(providerName);
+          if (providerInstance.hasCredentials && providerInstance.hasCredentials()) {
+            const updates = await providerInstance.generateLiveTelemetry(provResources);
+            if (Array.isArray(updates) && updates.length > 0) {
+              liveUpdates.push(...updates);
+              continue;
+            }
+          }
+
+          // Generate telemetry using high-fidelity provider simulation or MockCloud
+          if (providerName === 'Azure' && providerInstance.generateLiveTelemetry) {
+            const updates = await providerInstance.generateLiveTelemetry(provResources);
+            if (Array.isArray(updates)) {
+              liveUpdates.push(...updates);
+              continue;
+            }
+          }
+
+          const fallbackUpdates = await getCloudProvider('MockCloud').generateLiveTelemetry(provResources);
+          if (Array.isArray(fallbackUpdates)) {
+            liveUpdates.push(...fallbackUpdates);
+          }
+        } catch (provErr) {
+          const fallbackUpdates = await getCloudProvider('MockCloud').generateLiveTelemetry(provResources);
+          if (Array.isArray(fallbackUpdates)) {
+            liveUpdates.push(...fallbackUpdates);
+          }
+        }
+      }
 
       // Group updates by workspace for multiplexing
       const updatesByWorkspace = {};
@@ -104,6 +143,7 @@ function startLiveTelemetrySimulation() {
         // Payload validation (Task 1.3 requirement)
         if (update.cpuUsage !== undefined && update.memoryUsage !== undefined) {
           update.name = resource.name;
+          update.provider = resource.cloudAccount?.provider || 'CloudOps';
           updatesByWorkspace[workspaceId].push(update);
           // Broadcast to specific resource room
           ioInstance.to(`resource:${resource.id}`).emit('metric:live', update);

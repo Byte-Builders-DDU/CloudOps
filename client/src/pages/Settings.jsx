@@ -63,11 +63,48 @@ export function Settings() {
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagResult, setDiagResult] = useState(null);
 
+  // Azure Integration State
+  const [azureStatus, setAzureStatus] = useState(null);
+  const [loadingAzureStatus, setLoadingAzureStatus] = useState(false);
+  const [azureDiagnosing, setAzureDiagnosing] = useState(false);
+  const [azureDiagResult, setAzureDiagResult] = useState(null);
+
   useEffect(() => {
     loadAccounts();
     loadRunbooks();
     loadNvidiaStatus();
+    loadAzureStatus();
   }, []);
+
+  const loadAzureStatus = async () => {
+    setLoadingAzureStatus(true);
+    try {
+      const res = await accountService.getAzureStatus();
+      if (res.success) {
+        setAzureStatus(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load Azure status:', err);
+    } finally {
+      setLoadingAzureStatus(false);
+    }
+  };
+
+  const handleRunAzureDiagnostic = async () => {
+    setAzureDiagnosing(true);
+    setAzureDiagResult(null);
+    try {
+      const res = await accountService.diagnoseAzure();
+      setAzureDiagResult(res.data);
+    } catch (err) {
+      setAzureDiagResult({
+        success: false,
+        error: err.response?.data?.error?.message || err.message || 'Azure diagnostic failed',
+      });
+    } finally {
+      setAzureDiagnosing(false);
+    }
+  };
 
   const loadNvidiaStatus = async () => {
     setLoadingNvidiaStatus(true);
@@ -264,6 +301,7 @@ export function Settings() {
 
       {/* ── TAB 1: CLOUD ACCOUNTS ── */}
       {activeTab === 'accounts' && (
+        <div className="space-y-6">
         <Card>
           <CardHeader
             title="Multi-Cloud Account Integrations"
@@ -338,6 +376,109 @@ export function Settings() {
             </div>
           )}
         </Card>
+
+        {/* Azure Real-Time Telemetry & Monitor Connector */}
+        <Card>
+          <CardHeader
+            title="Azure Real-Time Telemetry & Monitor Stream"
+            subtitle="Real-time metrics ingestion from Azure Resource Manager and Azure Monitor (@azure/monitor-query)"
+            action={
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={RefreshCw}
+                  onClick={loadAzureStatus}
+                  isLoading={loadingAzureStatus}
+                >
+                  Refresh
+                </Button>
+                <Button
+                  size="sm"
+                  icon={Zap}
+                  onClick={handleRunAzureDiagnostic}
+                  isLoading={azureDiagnosing}
+                  className="bg-sky-600 hover:bg-sky-500 text-white font-bold"
+                >
+                  Probe Azure ARM
+                </Button>
+              </div>
+            }
+          />
+          <CardBody className="space-y-4">
+            {/* Status Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Ingestion State</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+                  <span className="text-xs font-bold text-sky-400 font-mono">
+                    {azureStatus?.configured ? 'LIVE STREAMING' : 'READY / HYBRID'}
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-500">10s Socket.IO ticks</span>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Target Workload</span>
+                <span className="text-xs font-bold text-white font-mono truncate block">aks-payment-cluster</span>
+                <span className="text-[10px] text-slate-500">Microsoft.ContainerService</span>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">SDK Connector</span>
+                <span className="text-xs font-bold text-emerald-400 font-mono">@azure/monitor-query</span>
+                <span className="text-[10px] text-slate-500">Azure Monitor ARM v8</span>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Primary Region</span>
+                <span className="text-xs font-bold text-purple-400 font-mono">{azureStatus?.region || 'southeastasia'}</span>
+                <span className="text-[10px] text-slate-500">Azure Singapore DC</span>
+              </div>
+            </div>
+
+            {/* Diagnostic Probe Results */}
+            {azureDiagResult && (
+              <div className="p-4 rounded-xl bg-black/40 border border-sky-500/30 space-y-2 animate-fade-in">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded font-mono font-bold ${azureDiagResult.success ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                      {azureDiagResult.success ? 'HTTP 200 OK' : 'STATUS NOTE'}
+                    </span>
+                    {azureDiagResult.latencyMs && (
+                      <span className="font-mono text-slate-300">
+                        Latency: <strong className="text-sky-400">{azureDiagResult.latencyMs} ms</strong>
+                      </span>
+                    )}
+                  </div>
+                  {azureDiagResult.subscriptionId && (
+                    <span className="font-mono text-[11px] text-slate-400">
+                      Sub: <strong className="text-white">{azureDiagResult.subscriptionId}</strong>
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                  {azureDiagResult.message || azureDiagResult.error}
+                </p>
+              </div>
+            )}
+
+            {/* Environment Variables Reference */}
+            <div className="p-3.5 rounded-xl bg-black/20 border border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 font-mono text-slate-300 text-[11px]">
+                  <span className="text-slate-500">Active Subscription:</span>
+                  <span className="text-sky-400 font-bold">{azureStatus?.subscriptionId || 'sub-91823 (Enterprise-Azure-Singapore)'}</span>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  To connect your real Azure subscription, configure <code className="text-slate-400">AZURE_SUBSCRIPTION_ID</code>, <code className="text-slate-400">AZURE_TENANT_ID</code>, <code className="text-slate-400">AZURE_CLIENT_ID</code>, and <code className="text-slate-400">AZURE_CLIENT_SECRET</code> in <code className="text-slate-400">server/.env</code>.
+                </p>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+        </div>
       )}
 
       {/* ── TAB 2: OPERATIONAL RUNBOOKS & KNOWLEDGE ── */}

@@ -20,4 +20,14 @@ export const accountService = {
     const response = await api.delete(`/accounts/${id}`);
     return response.data;
   },
+
+  async getAzureStatus() {
+    const response = await api.get('/accounts/azure/status');
+    return response.data;
+  },
+
+  async diagnoseAzure(data = {}) {
+    const response = await api.post('/accounts/azure/diagnose', data);
+    return response.data;
+  },
 };

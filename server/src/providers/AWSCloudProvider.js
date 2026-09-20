@@ -56,6 +56,13 @@ export class AWSCloudProvider extends CloudProvider {
   }
 
   /**
+   * Check if AWS credentials are configured.
+   */
+  hasCredentials() {
+    return Boolean(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY);
+  }
+
+  /**
    * Returns base credential object from environment variables.
    * If AWS_ROLE_ARN is set, AssumeRole is called and temporary credentials
    * are cached for the session duration (1 hour).
