@@ -20,7 +20,9 @@ export function generateSyntheticTelemetrySeries(days = 28, baseRequests = 10000
   const points = [];
   const totalHours = days * 24;
   const now = Date.now();
-  const startTime = now - totalHours * 3600 * 1000;
+  const startDate = new Date(now - totalHours * 3600 * 1000);
+  startDate.setUTCHours(0, 0, 0, 0);
+  const startTime = startDate.getTime();
 
   for (let h = 0; h < totalHours; h++) {
     const timestamp = new Date(startTime + h * 3600 * 1000);
