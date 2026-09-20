@@ -9,7 +9,7 @@ import { CostBreakdownChart } from '../components/charts/CostBreakdownChart';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import {
-  DollarSign,
+  IndianRupee,
   TrendingUp,
   PieChart,
   Calendar,
@@ -72,12 +72,12 @@ export function Costs() {
   return (
     <div className="space-y-6">
       {/* Top Cost KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-slide-up" style={{ animationDelay: '100ms', opacity: 0 }}>
         <StatCard
           title="Current Monthly Run-Rate"
           value={formatCurrency(costSummary?.currentMonthlyCost || 0)}
           subtitle="Real-time unblended spend"
-          icon={DollarSign}
+          icon={IndianRupee}
           trend="+3.2%"
           trendDirection="up"
           trendLabel="vs last month"
@@ -110,7 +110,8 @@ export function Costs() {
       </div>
 
       {/* Main Multi-Cloud Daily Spending Trend Chart */}
-      <Card>
+      <div className="animate-slide-up" style={{ animationDelay: '200ms', opacity: 0 }}>
+        <Card>
         <CardHeader
           title="30-Day Multi-Cloud Cost Trajectory"
           subtitle="Aggregated daily expenditure categorized by Cloud Provider"
@@ -119,41 +120,47 @@ export function Costs() {
           <CostTrendChart data={costSummary?.dailySpending || []} />
         </CardBody>
       </Card>
+      </div>
 
       {/* Cost Breakdowns Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Breakdown by Provider */}
-        <Card>
-          <CardHeader
-            title="Spend by Cloud Provider"
-            subtitle="Current monthly run-rate proportion"
-          />
-          <CardBody>
-            <CostBreakdownChart
-              data={costSummary?.providerBreakdown || []}
-              type="provider"
+        <div className="animate-slide-up" style={{ animationDelay: '300ms', opacity: 0 }}>
+          <Card>
+            <CardHeader
+              title="Spend by Cloud Provider"
+              subtitle="Current monthly run-rate proportion"
             />
-          </CardBody>
-        </Card>
+            <CardBody>
+              <CostBreakdownChart
+                data={costSummary?.providerBreakdown || []}
+                type="provider"
+              />
+            </CardBody>
+          </Card>
+        </div>
 
         {/* Breakdown by Service */}
-        <Card>
-          <CardHeader
-            title="Spend by Infrastructure Service"
-            subtitle="Top cost contributors across clusters"
-          />
-          <CardBody>
-            <CostBreakdownChart
-              data={costSummary?.serviceBreakdown || []}
-              type="service"
+        <div className="animate-slide-up" style={{ animationDelay: '400ms', opacity: 0 }}>
+          <Card>
+            <CardHeader
+              title="Spend by Infrastructure Service"
+              subtitle="Top cost contributors across clusters"
             />
-          </CardBody>
-        </Card>
+            <CardBody>
+              <CostBreakdownChart
+                data={costSummary?.serviceBreakdown || []}
+                type="service"
+              />
+            </CardBody>
+          </Card>
+        </div>
       </div>
 
       {/* Phase 3 Cross-Cloud Cost Arbitrage Table */}
       {arbitrageData?.catalog && (
-        <Card>
+        <div className="animate-slide-up" style={{ animationDelay: '500ms', opacity: 0 }}>
+          <Card>
           <CardHeader
             title="Cross-Cloud Cost Arbitrage & Instance Equivalence Catalog"
             subtitle="Normalized 4 vCPU / RAM workload shapes benchmarked across AWS, Azure, and Google Cloud"
@@ -206,10 +213,12 @@ export function Costs() {
             </table>
           </div>
         </Card>
+        </div>
       )}
 
       {/* Raw Billing Records Table */}
-      <Card>
+      <div className="animate-slide-up" style={{ animationDelay: '600ms', opacity: 0 }}>
+        <Card>
         <CardHeader
           title="Recent Cloud Ingestion & Cost Line Items"
           subtitle="Auditable billing logs from connected provider accounts"
@@ -254,6 +263,7 @@ export function Costs() {
           </table>
         </div>
       </Card>
+      </div>
     </div>
   );
 }

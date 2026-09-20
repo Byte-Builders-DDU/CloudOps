@@ -18,7 +18,7 @@ import {
   Clock,
   ArrowRight,
   Server,
-  DollarSign,
+  IndianRupee,
 } from 'lucide-react';
 import { scalingService } from '../services/scalingService';
 
@@ -108,7 +108,7 @@ export function Scaling() {
       )}
 
       {/* Top Highlights Banner */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-slide-up" style={{ animationDelay: '100ms', opacity: 0 }}>
         <Card className="p-4 bg-white border border-[#E2E8F0]">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase">Pending Optimizations</span>
@@ -121,7 +121,7 @@ export function Scaling() {
         <Card className="p-4 bg-white border border-[#E2E8F0]">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase">Monthly Savings Potential</span>
-            <DollarSign className="w-4 h-4 text-emerald-600" />
+            <IndianRupee className="w-4 h-4 text-emerald-600" />
           </div>
           <p className="text-2xl font-bold text-emerald-600 font-mono mt-1">
             {formatCurrency(potentialSavings)}/mo
@@ -140,7 +140,7 @@ export function Scaling() {
       </div>
 
       {/* Active Recommendations Section */}
-      <div>
+      <div className="animate-slide-up" style={{ animationDelay: '200ms', opacity: 0 }}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-sm font-bold text-[#0F172A] uppercase tracking-wider">
@@ -161,12 +161,12 @@ export function Scaling() {
           />
         ) : (
           <div className="space-y-4">
-            {pendingRecs.map((rec) => {
+            {pendingRecs.map((rec, i) => {
               const isScaleUp = rec.type === 'SCALE_UP';
               const isCostSaving = rec.estimatedCostChange < 0;
 
               return (
-                <Card key={rec.id} className="border border-[#E2E8F0] shadow-card">
+                <Card key={rec.id} className="border border-[#E2E8F0] shadow-card animate-slide-up" style={{ animationDelay: `${300 + i * 80}ms`, opacity: 0 }}>
                   <div className="p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
                     {/* Left: Metadata & Reason */}
                     <div className="flex-1 space-y-2">
@@ -262,7 +262,8 @@ export function Scaling() {
 
       {/* Historical Scaling Actions */}
       {appliedRecs.length > 0 && (
-        <Card>
+        <div className="animate-slide-up" style={{ animationDelay: '500ms', opacity: 0 }}>
+          <Card>
           <CardHeader
             title="Recent Optimization History"
             subtitle="Applied or dismissed recommendations"
@@ -290,6 +291,7 @@ export function Scaling() {
             ))}
           </div>
         </Card>
+        </div>
       )}
     </div>
   );
