@@ -2,75 +2,68 @@ import React from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
 import { formatCurrency } from '../../utils/formatters';
 
-export function CostBreakdownChart({
-  data = [],
-  height = 240,
-  type = 'provider', // 'provider' | 'service'
-}) {
-  const providerColors = {
-    AWS: '#FF9900',
-    Azure: '#0078D4',
-    GCP: '#4285F4',
-  };
+const PROVIDER_COLORS = { AWS: '#FF9900', Azure: '#0EA5E9', GCP: '#4285F4' };
+const BAR_COLORS = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#06B6D4', '#84CC16'];
 
-  const defaultBarColor = '#2563EB';
-
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-[#0F172A] border border-slate-700 text-white text-xs p-2.5 rounded-md shadow-lg">
-          <p className="text-slate-300 font-semibold mb-1">{payload[0].payload.name}</p>
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-slate-400">Monthly Run-Rate:</span>
-            <span className="font-bold text-white">{formatCurrency(payload[0].value)}</span>
+const CustomTooltip = ({ active, payload }) => {
+  if (active && payload && payload.length) {
+    const d = payload[0].payload;
+    const col = payload[0].fill;
+    return (
+      <div className="rounded-xl border border-white/[0.1] p-2.5 text-xs"
+        style={{ background: 'rgba(8,15,33,0.96)', backdropFilter: 'blur(12px)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+      >
+        <p className="font-bold text-white mb-1.5">{d.name}</p>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-slate-500">Monthly Cost</span>
+          <span className="font-bold font-mono text-white">{formatCurrency(payload[0].value)}</span>
+        </div>
+        {d.percentage !== undefined && (
+          <div className="flex items-center justify-between gap-4 mt-1 text-[11px]">
+            <span className="text-slate-600">Share</span>
+            <span className="font-mono" style={{ color: col }}>{d.percentage}%</span>
           </div>
-          {payload[0].payload.percentage !== undefined && (
-            <div className="flex items-center justify-between gap-4 mt-1 text-[11px] text-slate-400">
-              <span>Share:</span>
-              <span>{payload[0].payload.percentage}%</span>
-            </div>
-          )}
-        </div>
-      );
-    }
-    return null;
-  };
+        )}
+      </div>
+    );
+  }
+  return null;
+};
 
+export function CostBreakdownChart({ data = [], height = 240, type = 'provider' }) {
   return (
-    <div className="w-full h-[240px]">
+    <div className="w-full" style={{ height: `${height}px` }}>
       {data.length === 0 ? (
-        <div className="h-full flex items-center justify-center text-xs text-slate-400">
-          No cost records available.
-        </div>
+        <div className="h-full flex items-center justify-center text-xs text-slate-600 font-mono">No cost records available</div>
       ) : (
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false} />
+          <BarChart data={data} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }} barSize={14}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
             <XAxis
               type="number"
-              stroke="#94A3B8"
-              fontSize={10}
-              tickFormatter={(val) => `$${val}`}
+              stroke="rgba(0,0,0,0)"
+              tick={{ fill: '#475569', fontSize: 10, fontFamily: 'JetBrains Mono' }}
+              tickFormatter={(v) => `₹${v}`}
               tickLine={false}
-              axisLine={{ stroke: '#E2E8F0' }}
+              axisLine={false}
             />
             <YAxis
               type="category"
               dataKey="name"
-              stroke="#64748B"
-              fontSize={11}
+              stroke="rgba(0,0,0,0)"
+              tick={{ fill: '#64748B', fontSize: 11, fontFamily: 'JetBrains Mono' }}
               tickLine={false}
               axisLine={false}
-              width={100}
+              width={90}
             />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="cost" radius={[0, 4, 4, 0]}>
-              {data.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={type === 'provider' ? (providerColors[entry.name] || defaultBarColor) : defaultBarColor}
-                />
-              ))}
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+            <Bar dataKey="cost" radius={[0, 6, 6, 0]}>
+              {data.map((entry, i) => {
+                const color = type === 'provider' ? (PROVIDER_COLORS[entry.name] || BAR_COLORS[0]) : BAR_COLORS[i % BAR_COLORS.length];
+                return (
+                  <Cell key={`cell-${i}`} fill={color} style={{ filter: `drop-shadow(0 0 4px ${color}60)` }} />
+                );
+              })}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
