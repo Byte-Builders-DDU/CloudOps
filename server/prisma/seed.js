@@ -65,7 +65,8 @@ async function main() {
       name: 'Apurv Admin',
       email: 'admin@cloudops.dev',
       password: hashedPassword,
-      systemRole: 'USER',
+      role: 'ADMIN',
+      systemRole: 'SUPERADMIN',
     },
   });
 
@@ -75,6 +76,7 @@ async function main() {
       name: 'SecOps Approver',
       email: 'secops@cloudops.dev',
       password: hashedPassword,
+      role: 'ADMIN',
       systemRole: 'USER',
     },
   });
@@ -85,6 +87,7 @@ async function main() {
       name: 'DevOps Engineer',
       email: 'operator@cloudops.dev',
       password: hashedPassword,
+      role: 'OPERATOR',
       systemRole: 'USER',
     },
   });
@@ -95,6 +98,7 @@ async function main() {
       name: 'Product & Finance Analyst',
       email: 'viewer@cloudops.dev',
       password: hashedPassword,
+      role: 'VIEWER',
       systemRole: 'USER',
     },
   });

@@ -59,6 +59,7 @@ export async function login(req, res, next) {
         name: user.name,
         email: user.email,
         role: user.role,
+        systemRole: user.systemRole,
         createdAt: user.createdAt,
       },
     });

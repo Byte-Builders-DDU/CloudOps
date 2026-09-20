@@ -16,12 +16,16 @@ export function requireRoles(...allowedRoles) {
       });
     }
 
-    const currentRole = req.workspaceRole || req.user.role || 'VIEWER';
+    if (req.user.systemRole === 'SUPERADMIN' || req.user.role === 'ADMIN') {
+      return next();
+    }
 
-    if (!allowedRoles.includes(currentRole) && req.user.systemRole !== 'SUPERADMIN') {
+    const effectiveRole = req.workspaceRole || req.user.role || 'VIEWER';
+
+    if (!allowedRoles.includes(effectiveRole)) {
       return res.status(403).json({
         success: false,
-        message: `Forbidden: Action requires one of [${allowedRoles.join(', ')}] roles. Your role is '${currentRole}'.`,
+        message: `Forbidden: Action requires one of [${allowedRoles.join(', ')}] roles. Your role is '${effectiveRole}'.`,
       });
     }
 
