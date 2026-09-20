@@ -25,7 +25,11 @@ import {
   ChevronUp,
   FileText,
   User,
+  Sparkles,
+  Zap,
+  Cpu,
 } from 'lucide-react';
+import api from '../services/api';
 import { accountService } from '../services/accountService';
 import { runbookService } from '../services/runbookService';
 import { CloudConnectionModal } from '../components/resources/CloudConnectionModal';
@@ -52,10 +56,51 @@ export function Settings() {
   const [expandedRunbookId, setExpandedRunbookId] = useState(null);
   const [isCreateRunbookOpen, setIsCreateRunbookOpen] = useState(false);
 
+  // NVIDIA NIM State
+  const [nvidiaStatus, setNvidiaStatus] = useState(null);
+  const [loadingNvidiaStatus, setLoadingNvidiaStatus] = useState(false);
+  const [diagPrompt, setDiagPrompt] = useState('Why is Production API alerting right now? State CPU and recommended action.');
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagResult, setDiagResult] = useState(null);
+
   useEffect(() => {
     loadAccounts();
     loadRunbooks();
+    loadNvidiaStatus();
   }, []);
+
+  const loadNvidiaStatus = async () => {
+    setLoadingNvidiaStatus(true);
+    try {
+      const res = await api.get('/copilot/status');
+      if (res.data.success) {
+        setNvidiaStatus(res.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to load NVIDIA status:', err);
+    } finally {
+      setLoadingNvidiaStatus(false);
+    }
+  };
+
+  const handleRunDiagnostic = async (overridePrompt) => {
+    const promptToSend = overridePrompt || diagPrompt;
+    if (!promptToSend.trim() || diagnosing) return;
+
+    setDiagnosing(true);
+    setDiagResult(null);
+    try {
+      const res = await api.post('/copilot/diagnose', { prompt: promptToSend });
+      setDiagResult(res.data.data);
+    } catch (err) {
+      setDiagResult({
+        success: false,
+        error: err.response?.data?.error?.message || err.message || 'Diagnostic failed',
+      });
+    } finally {
+      setDiagnosing(false);
+    }
+  };
 
   const loadAccounts = async () => {
     setLoading(true);
@@ -201,6 +246,19 @@ export function Settings() {
         >
           <Code className="w-4 h-4" />
           Architecture Guide
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('nvidia'); loadNvidiaStatus(); }}
+          className={`px-4 py-2.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-2 ${
+            activeTab === 'nvidia'
+              ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-white/[0.03]'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-emerald-400" />
+          AI &amp; NVIDIA NIM
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
         </button>
       </div>
 
@@ -488,6 +546,217 @@ export function Settings() {
             </p>
           </CardBody>
         </Card>
+      )}
+
+      {/* ── TAB 5: AI & NVIDIA NIM INTEGRATION ── */}
+      {activeTab === 'nvidia' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Status & Config Overview */}
+          <Card>
+            <CardHeader
+              title="NVIDIA Build API & NIM Microservice"
+              subtitle="Enterprise LLM inference connection for AI Operations Copilot and zero-hallucination factual grounding"
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={RefreshCw}
+                  onClick={loadNvidiaStatus}
+                  isLoading={loadingNvidiaStatus}
+                >
+                  Refresh Status
+                </Button>
+              }
+            />
+            <CardBody className="space-y-6">
+              {/* Primary KPI Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                  <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block">Service Status</span>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-sm font-bold text-emerald-400 font-mono">OPERATIONAL</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500">Live API Key verified</span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                  <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block">Deployed Model</span>
+                  <span className="text-sm font-bold text-white font-mono truncate block" title={nvidiaStatus?.model}>
+                    {nvidiaStatus?.model || 'meta/llama-3.2-11b-vision-instruct'}
+                  </span>
+                  <span className="text-[10px] text-slate-500">Meta Llama 3.2 NIM</span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                  <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block">Inference Gateway</span>
+                  <span className="text-sm font-bold text-sky-400 font-mono">integrate.api.nvidia.com</span>
+                  <span className="text-[10px] text-slate-500">OpenAI-compatible v1</span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                  <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block">Circuit Breaker</span>
+                  <span className="text-sm font-bold text-emerald-400 font-mono">
+                    {nvidiaStatus?.circuitBreakerActive ? `TRIPPED (${nvidiaStatus.circuitBreakerRemainingSec}s)` : 'ARMED / NORMAL'}
+                  </span>
+                  <span className="text-[10px] text-slate-500">15s trip, 25s timeout</span>
+                </div>
+              </div>
+
+              {/* Endpoint Details */}
+              <div className="p-4 rounded-xl bg-black/30 border border-white/[0.06] space-y-2 text-xs font-mono">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-slate-300">
+                  <span className="text-slate-500">Configured Base URL:</span>
+                  <span className="text-white">{nvidiaStatus?.baseUrl || 'https://integrate.api.nvidia.com/v1'}</span>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-slate-300">
+                  <span className="text-slate-500">Authentication Key:</span>
+                  <span className="text-emerald-400 font-bold">{nvidiaStatus?.keyMask || 'Configured in server/.env'}</span>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-slate-300">
+                  <span className="text-slate-500">Execution Mode:</span>
+                  <span className="text-purple-400">Strictly Read-Only Sandboxed Grounding</span>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+
+          {/* Interactive Diagnostic Ping Console */}
+          <Card>
+            <CardHeader
+              title="Live Diagnostic Round-Trip Ping"
+              subtitle="Execute a real-time LLM inference query to NVIDIA NIM and measure token throughput and latency"
+            />
+            <CardBody className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Diagnostic Test Query
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={diagPrompt}
+                    onChange={(e) => setDiagPrompt(e.target.value)}
+                    placeholder="Enter diagnostic query..."
+                    className="flex-1 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.1] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50"
+                  />
+                  <Button
+                    size="sm"
+                    icon={Zap}
+                    onClick={() => handleRunDiagnostic()}
+                    isLoading={diagnosing}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                  >
+                    Send Test Ping
+                  </Button>
+                </div>
+
+                {/* Preset Quick Pings */}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const p = 'Why is Production API alerting right now? State CPU and recommended action.';
+                      setDiagPrompt(p);
+                      handleRunDiagnostic(p);
+                    }}
+                    className="text-[11px] px-2.5 py-1 rounded-full bg-white/[0.03] hover:bg-white/[0.06] text-slate-400 hover:text-white border border-white/[0.06] transition-colors"
+                  >
+                    ⚡ Test Production API Alert
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const p = 'Explain in one sentence why two-person approval prevents downtime.';
+                      setDiagPrompt(p);
+                      handleRunDiagnostic(p);
+                    }}
+                    className="text-[11px] px-2.5 py-1 rounded-full bg-white/[0.03] hover:bg-white/[0.06] text-slate-400 hover:text-white border border-white/[0.06] transition-colors"
+                  >
+                    ⚡ Test Two-Person Safety Policy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const p = 'What is the formula for AWS auto-scaling replica calculation?';
+                      setDiagPrompt(p);
+                      handleRunDiagnostic(p);
+                    }}
+                    className="text-[11px] px-2.5 py-1 rounded-full bg-white/[0.03] hover:bg-white/[0.06] text-slate-400 hover:text-white border border-white/[0.06] transition-colors"
+                  >
+                    ⚡ Test Scaling Math
+                  </button>
+                </div>
+              </div>
+
+              {/* Diagnostic Results Card */}
+              {diagResult && (
+                <div className="p-4 rounded-xl bg-black/40 border border-emerald-500/30 space-y-3 animate-fade-in">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono font-bold">
+                        HTTP {diagResult.status || 200} OK
+                      </span>
+                      <span className="font-mono text-slate-300">
+                        Latency: <strong className="text-emerald-400">{diagResult.latencyMs} ms</strong>
+                      </span>
+                    </div>
+                    {diagResult.usage && (
+                      <span className="font-mono text-[11px] text-slate-400">
+                        Tokens: <strong className="text-white">{diagResult.usage.totalTokens}</strong> (prompt: {diagResult.usage.promptTokens}, out: {diagResult.usage.completionTokens})
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-3 bg-white/[0.03] rounded-lg border border-white/[0.06] text-xs text-slate-200 leading-relaxed font-sans">
+                    {diagResult.content || diagResult.error}
+                  </div>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+
+          {/* AI Operational Governance Matrix */}
+          <Card>
+            <CardHeader
+              title="Operational Safety &amp; Sandboxing Architecture"
+              subtitle="PRD §5 (FR-06, FR-07) and DESIGN.md §6.10 Compliance Controls"
+            />
+            <CardBody>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2">
+                  <div className="flex items-center gap-2 text-white font-bold">
+                    <Shield className="w-4 h-4 text-emerald-400" />
+                    Read-Only Sandboxing
+                  </div>
+                  <p className="text-slate-400 leading-relaxed text-[11px]">
+                    The LLM has zero direct mutation privileges. It cannot invoke cloud provider APIs directly. All suggested changes are emitted as structured drafts requiring human review.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2">
+                  <div className="flex items-center gap-2 text-white font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-sky-400" />
+                    Zero-Hallucination Grounding
+                  </div>
+                  <p className="text-slate-400 leading-relaxed text-[11px]">
+                    System prompts inject deterministic database snapshots (CPU, latency, cloud rates). The model must cite evidence in bracketed markers [1][2][3] matching active records.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2">
+                  <div className="flex items-center gap-2 text-white font-bold">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    Fault-Tolerant Circuit Breaker
+                  </div>
+                  <p className="text-slate-400 leading-relaxed text-[11px]">
+                    If the external NVIDIA Build API encounters a timeout (&gt;25s) or HTTP error, the circuit breaker automatically arms for 15s and immediately falls back to the deterministic engine.
+                  </p>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
       )}
 
       {/* Cloud Account Wizard Modal */}

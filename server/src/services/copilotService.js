@@ -119,19 +119,20 @@ async function callNvidiaBuildLLM({ systemPrompt, userPrompt, modelOverride }) {
   }
 
   const baseUrl = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
-  const model = modelOverride || process.env.NVIDIA_MODEL || 'google/gemma-4-31b-it';
+  const model = modelOverride || process.env.NVIDIA_MODEL || 'meta/llama-3.3-70b-instruct';
   const temperature = parseFloat(process.env.NVIDIA_TEMPERATURE || '0.2');
   const maxTokens = parseInt(process.env.NVIDIA_MAX_TOKENS || '1024', 10);
+  const timeoutMs = parseInt(process.env.NVIDIA_TIMEOUT_MS || '25000', 10);
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout protection
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // 25s timeout protection for LLM generation
 
   try {
     const res = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${apiKey.trim()}`,
       },
       body: JSON.stringify({
         model,
@@ -150,9 +151,9 @@ async function callNvidiaBuildLLM({ systemPrompt, userPrompt, modelOverride }) {
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-      circuitBreakerUntil = Date.now() + 60000; // Trip circuit breaker for 60s
+      circuitBreakerUntil = Date.now() + 15000; // Trip circuit breaker for 15s
       const errorText = await res.text();
-      console.warn(`[NVIDIA Build API] HTTP ${res.status}: ${errorText}. Circuit breaker active for 60s.`);
+      console.warn(`[NVIDIA Build API] HTTP ${res.status} (${model}): ${errorText}. Circuit breaker active for 15s.`);
       return null; // Graceful fallback
     }
 
@@ -169,8 +170,8 @@ async function callNvidiaBuildLLM({ systemPrompt, userPrompt, modelOverride }) {
     };
   } catch (err) {
     clearTimeout(timeoutId);
-    circuitBreakerUntil = Date.now() + 60000; // Trip circuit breaker for 60s
-    console.warn(`[NVIDIA Build API] Error/Timeout (${err.message}). Circuit breaker active for 60s. Gracefully degrading to deterministic engine.`);
+    circuitBreakerUntil = Date.now() + 15000; // Trip circuit breaker for 15s
+    console.warn(`[NVIDIA Build API] Error (${err.name === 'AbortError' ? 'Request timed out after ' + timeoutMs + 'ms' : err.message}). Circuit breaker active for 15s. Falling back to deterministic engine.`);
     return null;
   }
 }
@@ -494,4 +495,101 @@ export async function generateOperationalBrief(workspaceId) {
       },
     ],
   };
+}
+
+/**
+ * Returns current NVIDIA NIM / Build API configuration status and health indicators.
+ */
+export function getNvidiaStatus() {
+  const apiKey = process.env.NVIDIA_API_KEY;
+  const isConfigured = Boolean(apiKey && apiKey.trim() !== '');
+  const keyMask = isConfigured ? `${apiKey.trim().slice(0, 8)}...${apiKey.trim().slice(-4)}` : null;
+  const baseUrl = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
+  const model = process.env.NVIDIA_MODEL || 'meta/llama-3.2-11b-vision-instruct';
+
+  return {
+    provider: 'nvidia',
+    isConfigured,
+    keyMask,
+    baseUrl,
+    model,
+    circuitBreakerActive: Date.now() < circuitBreakerUntil,
+    circuitBreakerRemainingSec: Math.max(0, Math.ceil((circuitBreakerUntil - Date.now()) / 1000)),
+  };
+}
+
+/**
+ * Diagnoses live connection to NVIDIA Build API with a latency and token round-trip test.
+ */
+export async function diagnoseNvidiaConnection(testPrompt = 'Explain in one sentence why automated cloud governance with two-person approval prevents downtime.') {
+  const apiKey = process.env.NVIDIA_API_KEY;
+  if (!apiKey || apiKey.trim() === '') {
+    return {
+      success: false,
+      error: 'NVIDIA_API_KEY is not configured in server/.env.',
+    };
+  }
+
+  const baseUrl = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
+  const model = process.env.NVIDIA_MODEL || 'meta/llama-3.2-11b-vision-instruct';
+  const startTime = Date.now();
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey.trim()}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: 'You are CloudOps Copilot running on NVIDIA NIM. Answer concisely in 1-2 sentences.' },
+          { role: 'user', content: testPrompt },
+        ],
+        temperature: 0.2,
+        max_tokens: 150,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    const latencyMs = Date.now() - startTime;
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      return {
+        success: false,
+        status: res.status,
+        latencyMs,
+        error: errorText,
+      };
+    }
+
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const usage = data.usage || {};
+
+    return {
+      success: true,
+      status: 200,
+      latencyMs,
+      model,
+      content,
+      usage: {
+        promptTokens: usage.prompt_tokens || 0,
+        completionTokens: usage.completion_tokens || 0,
+        totalTokens: usage.total_tokens || 0,
+      },
+    };
+  } catch (err) {
+    return {
+      success: false,
+      latencyMs: Date.now() - startTime,
+      error: err.name === 'AbortError' ? 'Diagnostic request timed out after 20s.' : err.message,
+    };
+  }
 }

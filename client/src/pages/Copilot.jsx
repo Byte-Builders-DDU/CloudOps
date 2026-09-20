@@ -18,10 +18,23 @@ export function Copilot() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeCitation, setActiveCitation] = useState(null);
+  const [modelStatus, setModelStatus] = useState(null);
 
   useEffect(() => {
     fetchThreads();
+    fetchStatus();
   }, []);
+
+  const fetchStatus = async () => {
+    try {
+      const res = await api.get('/copilot/status');
+      if (res.data.success) {
+        setModelStatus(res.data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching copilot status:', err);
+    }
+  };
 
   const fetchThreads = async () => {
     try {
@@ -119,13 +132,23 @@ export function Copilot() {
               <Sparkles className="w-4.5 h-4.5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white font-display">Production AI Operations Copilot</h2>
-              <span className="text-[10px] text-slate-400 font-mono">Model: gemini-2.0-flash-grounded</span>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-white font-display">Production AI Operations Copilot</h2>
+                <span className="flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  NVIDIA NIM
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono">
+                Model: {modelStatus?.model || 'meta/llama-3.2-11b-vision-instruct'} • {modelStatus?.isConfigured ? 'Live API Active' : 'Deterministic Fallback'}
+              </span>
             </div>
           </div>
-          <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
-            Read-Only Sandboxed
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">
+              Read-Only Sandboxed
+            </span>
+          </div>
         </div>
 
         {/* Message History */}
@@ -188,6 +211,20 @@ export function Copilot() {
                         Review Draft in Drawer <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* Model Attribution Metadata */}
+                {msg.modelIdentifier && (
+                  <div className="pt-2 flex items-center justify-between text-[10px] font-mono text-slate-500 border-t border-white/[0.04]">
+                    <span className="text-violet-400/80">
+                      ⚡ Powered by {msg.modelIdentifier}
+                    </span>
+                    {msg.tokensPrompt && (
+                      <span>
+                        Tokens: {msg.tokensPrompt + (msg.tokensCompletion || 0)} (prompt: {msg.tokensPrompt}, out: {msg.tokensCompletion})
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

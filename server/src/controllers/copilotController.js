@@ -1,5 +1,10 @@
 import prisma from '../models/prisma.js';
-import { executeCopilotQuery, generateOperationalBrief } from '../services/copilotService.js';
+import {
+  executeCopilotQuery,
+  generateOperationalBrief,
+  getNvidiaStatus,
+  diagnoseNvidiaConnection,
+} from '../services/copilotService.js';
 
 /**
  * AI Operations Copilot Controller
@@ -114,6 +119,31 @@ export async function recordFeedback(req, res, next) {
     res.json({
       success: true,
       message: 'Feedback recorded for model evaluation corpus.',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getCopilotStatus(req, res, next) {
+  try {
+    const status = getNvidiaStatus();
+    res.json({
+      success: true,
+      data: status,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function diagnoseCopilot(req, res, next) {
+  try {
+    const { prompt } = req.body;
+    const diag = await diagnoseNvidiaConnection(prompt);
+    res.json({
+      success: diag.success,
+      data: diag,
     });
   } catch (error) {
     next(error);

@@ -60,11 +60,12 @@ export function CopilotPanel({ isOpen, onClose, onOpenReview }) {
             <div>
               <h2 className="text-sm font-bold text-white flex items-center gap-2 font-display">
                 AI Operations Copilot
-                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border border-violet-500/30 bg-violet-500/10 text-violet-400">
-                  Grounded
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  NVIDIA NIM
                 </span>
               </h2>
-              <p className="text-[11px] text-slate-400">Attributable Workspace Intelligence</p>
+              <p className="text-[11px] text-slate-400">Attributable Workspace Intelligence • NVIDIA Build API</p>
             </div>
           </div>
           <button
@@ -142,6 +143,14 @@ export function CopilotPanel({ isOpen, onClose, onOpenReview }) {
                         Review Draft <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* Model Attribution */}
+                {msg.modelIdentifier && (
+                  <div className="pt-2 flex items-center justify-between text-[10px] font-mono text-slate-500 border-t border-white/[0.04]">
+                    <span className="text-violet-400/80">⚡ Powered by {msg.modelIdentifier}</span>
+                    {msg.tokensPrompt && <span>Tokens: {msg.tokensPrompt + (msg.tokensCompletion || 0)}</span>}
                   </div>
                 )}
               </div>
