@@ -69,11 +69,18 @@ export function Settings() {
   const [azureDiagnosing, setAzureDiagnosing] = useState(false);
   const [azureDiagResult, setAzureDiagResult] = useState(null);
 
+  // AWS Integration State
+  const [awsStatus, setAwsStatus] = useState(null);
+  const [loadingAwsStatus, setLoadingAwsStatus] = useState(false);
+  const [awsDiagnosing, setAwsDiagnosing] = useState(false);
+  const [awsDiagResult, setAwsDiagResult] = useState(null);
+
   useEffect(() => {
     loadAccounts();
     loadRunbooks();
     loadNvidiaStatus();
     loadAzureStatus();
+    loadAwsStatus();
   }, []);
 
   const loadAzureStatus = async () => {
@@ -103,6 +110,36 @@ export function Settings() {
       });
     } finally {
       setAzureDiagnosing(false);
+    }
+  };
+
+  const loadAwsStatus = async () => {
+    setLoadingAwsStatus(true);
+    try {
+      const res = await accountService.getAwsStatus();
+      if (res.success) {
+        setAwsStatus(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load AWS status:', err);
+    } finally {
+      setLoadingAwsStatus(false);
+    }
+  };
+
+  const handleRunAwsDiagnostic = async () => {
+    setAwsDiagnosing(true);
+    setAwsDiagResult(null);
+    try {
+      const res = await accountService.diagnoseAws();
+      setAwsDiagResult(res.data);
+    } catch (err) {
+      setAwsDiagResult({
+        success: false,
+        error: err.response?.data?.error?.message || err.message || 'AWS diagnostic failed',
+      });
+    } finally {
+      setAwsDiagnosing(false);
     }
   };
 
@@ -461,6 +498,17 @@ export function Settings() {
                 <p className="text-xs text-slate-300 font-sans leading-relaxed">
                   {azureDiagResult.message || azureDiagResult.error}
                 </p>
+
+                {azureDiagResult.roleCommand && (
+                  <div className="mt-2 space-y-1">
+                    <span className="text-[10px] text-slate-400 font-medium block">
+                      Quick Fix — Grant Reader role via Azure CLI:
+                    </span>
+                    <div className="p-2.5 rounded-lg bg-black/60 border border-white/[0.1] font-mono text-[11px] text-emerald-400 select-all overflow-x-auto">
+                      {azureDiagResult.roleCommand}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -473,6 +521,133 @@ export function Settings() {
                 </div>
                 <p className="text-[10px] text-slate-500">
                   To connect your real Azure subscription, configure <code className="text-slate-400">AZURE_SUBSCRIPTION_ID</code>, <code className="text-slate-400">AZURE_TENANT_ID</code>, <code className="text-slate-400">AZURE_CLIENT_ID</code>, and <code className="text-slate-400">AZURE_CLIENT_SECRET</code> in <code className="text-slate-400">server/.env</code>.
+                </p>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+
+        {/* AWS Real-Time Telemetry & CloudWatch Stream Connector */}
+        <Card>
+          <CardHeader
+            title="AWS Real-Time Telemetry & CloudWatch Stream"
+            subtitle="Real-time metric telemetry from AWS CloudWatch & Auto Scaling via AWS SDK v3 (@aws-sdk/client-*)"
+            action={
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={RefreshCw}
+                  onClick={loadAwsStatus}
+                  isLoading={loadingAwsStatus}
+                >
+                  Refresh
+                </Button>
+                <Button
+                  size="sm"
+                  icon={Zap}
+                  onClick={handleRunAwsDiagnostic}
+                  isLoading={awsDiagnosing}
+                  className="bg-amber-600 hover:bg-amber-500 text-white font-bold"
+                >
+                  Probe AWS CloudWatch & STS
+                </Button>
+              </div>
+            }
+          />
+          <CardBody className="space-y-4">
+            {/* Status Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Ingestion State</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="text-xs font-bold text-amber-400 font-mono">
+                    {awsStatus?.configured ? 'LIVE STREAMING' : 'READY / HYBRID'}
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-500">10s Socket.IO ticks</span>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Target Workloads</span>
+                <span className="text-xs font-bold text-white font-mono truncate block">api-asg • DynamoDB</span>
+                <span className="text-[10px] text-slate-500">AWS/EC2 • AWS/DynamoDB</span>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">SDK Connector</span>
+                <span className="text-xs font-bold text-emerald-400 font-mono">@aws-sdk/client-cloudwatch</span>
+                <span className="text-[10px] text-slate-500">AWS SDK v3 (STS + CW)</span>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Primary Region</span>
+                <span className="text-xs font-bold text-purple-400 font-mono">{awsStatus?.region || 'ap-south-1'}</span>
+                <span className="text-[10px] text-slate-500">AWS Asia Pacific (Mumbai)</span>
+              </div>
+            </div>
+
+            {/* Diagnostic Probe Results */}
+            {awsDiagResult && (
+              <div className="p-4 rounded-xl bg-black/40 border border-amber-500/30 space-y-3 animate-fade-in">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded font-mono font-bold ${awsDiagResult.success ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                      {awsDiagResult.success ? 'HTTP 200 OK' : 'DIAGNOSTIC ERROR'}
+                    </span>
+                    {awsDiagResult.latencyMs && (
+                      <span className="font-mono text-slate-300">
+                        Latency: <strong className="text-amber-400">{awsDiagResult.latencyMs} ms</strong>
+                      </span>
+                    )}
+                  </div>
+                  {awsDiagResult.accountId && (
+                    <span className="font-mono text-[11px] text-slate-400">
+                      Account ID: <strong className="text-white">{awsDiagResult.accountId}</strong>
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                  {awsDiagResult.message || awsDiagResult.error}
+                </p>
+
+                {awsDiagResult.arn && (
+                  <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400 bg-white/[0.02] p-2 rounded-lg border border-white/[0.05]">
+                    <span className="text-slate-500">Authenticated ARN:</span>
+                    <span className="text-amber-300 select-all truncate">{awsDiagResult.arn}</span>
+                  </div>
+                )}
+
+                {awsDiagResult.discoveredNamespaces && awsDiagResult.discoveredNamespaces.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
+                      Active CloudWatch Namespaces ({awsDiagResult.metricStreamsCount} metrics discovered):
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {awsDiagResult.discoveredNamespaces.map((ns) => (
+                        <span key={ns} className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                          {ns}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Environment Variables Reference */}
+            <div className="p-3.5 rounded-xl bg-black/20 border border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 font-mono text-slate-300 text-[11px]">
+                  <span className="text-slate-500">Access Key:</span>
+                  <span className="text-amber-400 font-bold">{awsStatus?.accessKeyId || 'AKIAS... (Connected)'}</span>
+                  <span className="text-slate-500 ml-2">Target Region:</span>
+                  <span className="text-purple-400 font-bold">{awsStatus?.region || 'ap-south-1'}</span>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Driven by <code className="text-slate-400">AWS_REGION</code>, <code className="text-slate-400">AWS_ACCESS_KEY_ID</code>, and <code className="text-slate-400">AWS_SECRET_ACCESS_KEY</code> in <code className="text-slate-400">server/.env</code>.
                 </p>
               </div>
             </div>

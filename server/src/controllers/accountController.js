@@ -61,6 +61,42 @@ export async function diagnoseAzureConnector(req, res, next) {
 }
 
 /**
+ * Get AWS connector status and credential state
+ */
+export async function getAwsConnectorStatus(req, res, next) {
+  try {
+    const awsProvider = getCloudProvider('AWS');
+    const status = awsProvider.getAwsStatus ? awsProvider.getAwsStatus() : {
+      provider: 'AWS',
+      configured: false,
+      status: 'UNCONFIGURED',
+    };
+    return res.status(200).json({
+      success: true,
+      data: status,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Run diagnostic probe against AWS STS & CloudWatch API
+ */
+export async function diagnoseAwsConnector(req, res, next) {
+  try {
+    const awsProvider = getCloudProvider('AWS');
+    const result = await awsProvider.diagnoseAwsConnection();
+    return res.status(200).json({
+      success: result.success,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
  * Sync/Health check a cloud account connector
  */
 export async function syncAccount(req, res, next) {
@@ -90,6 +126,19 @@ export async function syncAccount(req, res, next) {
           syncDetail = `Live Azure ARM discovery reconciled ${liveResources.length} scale set(s) and clusters.`;
         } catch (azureErr) {
           console.warn('[Sync] Azure live query warning:', azureErr.message);
+        }
+      }
+    }
+
+    // If AWS provider and credentials configured, probe live ASG resources
+    if (account.provider === 'AWS') {
+      const awsProvider = getCloudProvider('AWS');
+      if (awsProvider.hasCredentials && awsProvider.hasCredentials()) {
+        try {
+          const liveResources = await awsProvider.getResources();
+          syncDetail = `Live AWS discovery reconciled ${liveResources.length} Auto Scaling Group(s).`;
+        } catch (awsErr) {
+          console.warn('[Sync] AWS live query warning:', awsErr.message);
         }
       }
     }

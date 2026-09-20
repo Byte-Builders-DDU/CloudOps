@@ -536,11 +536,19 @@ export class AzureCloudProvider extends CloudProvider {
         message: `Successfully authenticated with Azure ARM. Discovered ${scaleSetCount} scale set(s) in ${latencyMs}ms.`,
       };
     } catch (err) {
+      const is403 = err.statusCode === 403 || err.message?.includes('403') || err.message?.includes('AuthorizationFailed');
+      let friendlyError = err.message;
+      if (is403) {
+        friendlyError = `Entra ID authentication succeeded, but Service Principal (${this.clientId}) does not have 'Reader' role assigned on Subscription ${this.subscriptionId}. In Azure Portal, go to Subscriptions -> Access control (IAM) -> Add role assignment -> 'Reader' to this App ID.`;
+      }
+
       return {
         success: false,
         configured: true,
         latencyMs: Date.now() - startTime,
-        error: err.message,
+        error: friendlyError,
+        isRbacIssue: is403,
+        roleCommand: `az role assignment create --assignee "${this.clientId}" --role "Reader" --scope "/subscriptions/${this.subscriptionId}"`,
       };
     }
   }

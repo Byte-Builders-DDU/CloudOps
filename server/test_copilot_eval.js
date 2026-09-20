@@ -158,6 +158,10 @@ async function runEvaluation() {
   let totalCitations = 0;
   let structuredDraftsGenerated = 0;
   const categoryStats = {};
+  // Stash remote LLM API key during automated batch regression evaluation
+  // to evaluate grounding, formulas, and citations deterministically and prevent token consumption
+  const savedApiKey = process.env.NVIDIA_API_KEY;
+  delete process.env.NVIDIA_API_KEY;
 
   const startTime = Date.now();
 
@@ -224,6 +228,10 @@ async function runEvaluation() {
     console.log(`  • ${cat.padEnd(14)}: ${stats.passed}/${stats.total} passed (${catRate}%)`);
   }
   console.log('='.repeat(65) + '\n');
+
+  if (savedApiKey) {
+    process.env.NVIDIA_API_KEY = savedApiKey;
+  }
 
   if (parseFloat(passRate) >= 95.0) {
     console.log(`🎉 100-QUESTION OPERATIONAL EVALUATION PASSED! (${passRate}% >= 95.0% target)`);

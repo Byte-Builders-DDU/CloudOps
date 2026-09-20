@@ -30,4 +30,14 @@ export const accountService = {
     const response = await api.post('/accounts/azure/diagnose', data);
     return response.data;
   },
+
+  async getAwsStatus() {
+    const response = await api.get('/accounts/aws/status');
+    return response.data;
+  },
+
+  async diagnoseAws(data = {}) {
+    const response = await api.post('/accounts/aws/diagnose', data);
+    return response.data;
+  },
 };
