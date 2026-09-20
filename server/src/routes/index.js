@@ -11,6 +11,8 @@ import dashboardRoutes from './dashboardRoutes.js';
 import changeRoutes from './changeRoutes.js';
 import copilotRoutes from './copilotRoutes.js';
 import serviceRoutes from './serviceRoutes.js';
+import runbookRoutes from './runbookRoutes.js';
+import notificationRoutes from './notificationRoutes.js';
 
 const router = Router();
 
@@ -26,6 +28,8 @@ router.use('/costs', costRoutes);
 router.use('/policies', policyRoutes);
 router.use('/audit-logs', auditRoutes);
 router.use('/accounts', accountRoutes);
+router.use('/runbooks', runbookRoutes);
+router.use('/notifications', notificationRoutes);
 
 // Health probe endpoint
 router.get('/health', (req, res) => {

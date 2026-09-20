@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useCloudFilter } from '../../hooks/useCloudFilter';
 import { useSocket } from '../../hooks/useSocket';
 import { CLOUD_PROVIDERS } from '../../utils/constants';
+import { notificationService } from '../../services/notificationService';
 import {
   Bell,
   CheckCircle2,
@@ -20,13 +21,59 @@ import {
 
 export function TopBar({ onOpenCopilot }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, role, switchDemoAccount } = useAuth();
   const { selectedProvider, setSelectedProvider, triggerRefresh } = useCloudFilter();
   const { isConnected } = useSocket();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [unreadCount] = useState(2);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadNotifications = async () => {
+    try {
+      const res = await notificationService.getNotifications();
+      if (res.success) {
+        setNotifications(res.data);
+        setUnreadCount(res.unreadCount || 0);
+      }
+    } catch (err) {
+      console.error('Failed to load notifications:', err);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationService.markAllAsRead();
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error('Failed to mark all read:', err);
+    }
+  };
+
+  const handleNotificationClick = async (n) => {
+    if (!n.isRead) {
+      try {
+        await notificationService.markAsRead(n.id);
+        setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, isRead: true } : item));
+        setUnreadCount(c => Math.max(0, c - 1));
+      } catch (e) {
+        // ignore
+      }
+    }
+    if (n.linkUrl) {
+      setShowNotifications(false);
+      navigate(n.linkUrl);
+    }
+  };
 
   const getPageInfo = (path) => {
     const seg = path.replace('/', '').split('/')[0];
@@ -46,12 +93,6 @@ export function TopBar({ onOpenCopilot }) {
   };
 
   const { title, sub } = getPageInfo(location.pathname);
-
-  const notifications = [
-    { id: 1, title: 'Traffic Surge on Production API (+34%)', time: '5m ago', unread: true, type: 'warning' },
-    { id: 2, title: 'AI detected potential savings of ₹5,700/mo', time: '20m ago', unread: true, type: 'info' },
-    { id: 3, title: 'Production capacity guardrail verified', time: '1h ago', unread: false, type: 'success' },
-  ];
 
   return (
     <header className="h-14 border-b border-white/[0.06] px-6 flex items-center justify-between sticky top-0 z-20 relative"
@@ -146,26 +187,58 @@ export function TopBar({ onOpenCopilot }) {
             >
               <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/40 to-transparent rounded-t-xl" />
               <div className="flex items-center justify-between pb-2 border-b border-white/[0.06] mb-2">
-                <span className="text-xs font-bold text-white">Operational Alerts</span>
-                <span className="chip-blue cursor-pointer">Mark all read</span>
+                <span className="text-xs font-bold text-white">Operational Alerts ({unreadCount} unread)</span>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={handleMarkAllRead}
+                    className="text-[10px] text-blue-400 hover:text-blue-300 font-semibold cursor-pointer"
+                  >
+                    Mark all read
+                  </button>
+                )}
               </div>
-              <div className="space-y-1 max-h-60 overflow-y-auto">
-                {notifications.map((n) => (
-                  <div key={n.id} className="flex items-start gap-2.5 py-2 px-2 rounded-lg hover:bg-white/[0.04] transition-colors cursor-pointer">
-                    {n.type === 'warning' ? (
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" style={{ filter: 'drop-shadow(0 0 4px #FBBF24)' }} />
-                    ) : n.type === 'info' ? (
-                      <Sparkles className="w-3.5 h-3.5 text-violet-400 shrink-0 mt-0.5" />
-                    ) : (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" style={{ filter: 'drop-shadow(0 0 4px #34D399)' }} />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-slate-200 leading-snug">{n.title}</p>
-                      <span className="text-[10px] text-slate-600 font-mono">{n.time}</span>
-                    </div>
-                    {n.unread && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 mt-1.5" />}
+              <div className="space-y-1 max-h-72 overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-slate-500">
+                    No active notifications.
                   </div>
-                ))}
+                ) : (
+                  notifications.map((n) => {
+                    const isWarn = n.severity === 'WARNING' || n.severity === 'CRITICAL';
+                    const isCrit = n.severity === 'CRITICAL';
+                    const isInfo = n.severity === 'INFO';
+
+                    return (
+                      <div
+                        key={n.id}
+                        onClick={() => handleNotificationClick(n)}
+                        className={`flex items-start gap-2.5 py-2 px-2 rounded-lg transition-colors cursor-pointer ${
+                          !n.isRead ? 'bg-white/[0.05] hover:bg-white/[0.08]' : 'hover:bg-white/[0.03] opacity-75'
+                        }`}
+                      >
+                        {isCrit ? (
+                          <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" style={{ filter: 'drop-shadow(0 0 4px #EF4444)' }} />
+                        ) : isWarn ? (
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" style={{ filter: 'drop-shadow(0 0 4px #FBBF24)' }} />
+                        ) : isInfo ? (
+                          <Sparkles className="w-3.5 h-3.5 text-violet-400 shrink-0 mt-0.5" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" style={{ filter: 'drop-shadow(0 0 4px #34D399)' }} />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs leading-snug ${!n.isRead ? 'font-bold text-white' : 'font-medium text-slate-300'}`}>
+                            {n.title}
+                          </p>
+                          <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{n.message}</p>
+                          <span className="text-[9px] text-slate-500 font-mono block mt-0.5">
+                            {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        {!n.isRead && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 mt-1.5" />}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           )}

@@ -10,9 +10,11 @@ import {
   TrendingUp,
   AlertTriangle,
   RefreshCw,
+  FileCheck2,
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../hooks/useAuth';
+import { OutcomeReportModal } from '../components/changes/OutcomeReportModal';
 
 export function Changes() {
   const { user, role } = useAuth();
@@ -24,6 +26,7 @@ export function Changes() {
   const [rejectReason, setRejectReason] = useState('');
   const [actionError, setActionError] = useState(null);
   const [actionSuccess, setActionSuccess] = useState(null);
+  const [selectedOutcomeId, setSelectedOutcomeId] = useState(null);
 
   useEffect(() => {
     fetchChanges();
@@ -259,9 +262,19 @@ export function Changes() {
                             </button>
                           </div>
                         ) : (
-                          <span className="text-slate-400 text-[11px] font-mono">
-                            {c.operation?.status || 'Archived'}
-                          </span>
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="text-slate-400 text-[11px] font-mono">
+                              {c.operation?.status || c.status}
+                            </span>
+                            {(c.status === 'APPLIED' || c.status === 'APPROVED' || c.operation?.status === 'SUCCEEDED') && (
+                              <button
+                                onClick={() => setSelectedOutcomeId(c.id)}
+                                className="px-2.5 py-1 text-[11px] font-medium rounded border border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors flex items-center gap-1"
+                              >
+                                <FileCheck2 className="w-3 h-3" /> Report
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -302,6 +315,13 @@ export function Changes() {
           </div>
         </div>
       )}
+
+      {/* Post-Change Outcome & Verification Modal */}
+      <OutcomeReportModal
+        changeId={selectedOutcomeId}
+        isOpen={Boolean(selectedOutcomeId)}
+        onClose={() => setSelectedOutcomeId(null)}
+      />
     </div>
   );
 }
