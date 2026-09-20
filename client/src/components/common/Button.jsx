@@ -11,28 +11,29 @@ export function Button({
   icon: Icon,
   ...props
 }) {
-  const baseStyles = 'inline-flex items-center justify-center font-medium transition-colors duration-150 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed select-none';
+  const base = 'inline-flex items-center justify-center font-semibold transition-all duration-200 rounded-xl focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed select-none';
 
   const variants = {
-    primary: 'bg-[#2563EB] hover:bg-[#1D4ED8] text-white focus:ring-blue-500 shadow-sm',
-    secondary: 'bg-[#0F172A] hover:bg-[#1E293B] text-white focus:ring-slate-700 shadow-sm',
-    outline: 'border border-[#E2E8F0] bg-white hover:bg-slate-50 text-[#0F172A] focus:ring-slate-300 shadow-sm',
-    ghost: 'text-slate-600 hover:text-[#0F172A] hover:bg-slate-100 focus:ring-slate-300',
-    danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 shadow-sm',
-    success: 'bg-emerald-600 hover:bg-emerald-700 text-white focus:ring-emerald-500 shadow-sm',
+    primary:   'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white border border-blue-500/30 shadow-[0_4px_16px_rgba(37,99,235,0.35)] hover:shadow-[0_8px_24px_rgba(37,99,235,0.5)] hover:-translate-y-px',
+    secondary: 'bg-white/[0.05] hover:bg-white/[0.08] text-slate-300 border border-white/[0.08] hover:border-white/[0.15]',
+    outline:   'border border-white/[0.1] bg-transparent hover:bg-white/[0.04] text-slate-300 hover:text-white',
+    ghost:     'text-slate-400 hover:text-white hover:bg-white/[0.05]',
+    danger:    'bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/25 hover:border-red-500/40',
+    success:   'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/25 hover:border-emerald-500/40',
+    violet:    'bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white border border-violet-500/30 shadow-[0_4px_16px_rgba(124,58,237,0.35)] hover:shadow-[0_8px_24px_rgba(124,58,237,0.5)] hover:-translate-y-px',
   };
 
   const sizes = {
-    xs: 'px-2 py-1 text-xs gap-1.5',
-    sm: 'px-3 py-1.5 text-xs font-medium gap-1.5',
-    md: 'px-4 py-2 text-sm gap-2',
-    lg: 'px-5 py-2.5 text-base gap-2.5',
+    xs: 'px-2.5 py-1 text-xs gap-1.5',
+    sm: 'px-3 py-1.5 text-xs gap-1.5',
+    md: 'px-4 py-2.5 text-sm gap-2',
+    lg: 'px-5 py-3 text-sm gap-2',
   };
 
   return (
     <button
       disabled={disabled || isLoading}
-      className={`${baseStyles} ${variants[variant] || variants.primary} ${sizes[size] || sizes.md} ${className}`}
+      className={`${base} ${variants[variant] || variants.primary} ${sizes[size] || sizes.md} ${className}`}
       {...props}
     >
       {isLoading ? (
