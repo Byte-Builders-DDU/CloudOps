@@ -149,133 +149,111 @@ export function Monitoring() {
 
   return (
     <div className="space-y-6">
-      {/* Control Bar: Resource Selector & Time Range Selector */}
-      <Card className="p-4">
+      {/* Control Bar */}
+      <Card className="p-4 animate-slide-up" style={{ animationDelay: '100ms', opacity: 0 }}>
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          {/* Workload Dropdown */}
           <div className="flex items-center gap-3 w-full md:w-auto">
-            <span className="text-xs font-semibold text-slate-700 whitespace-nowrap">Target Workload:</span>
+            <span className="text-xs font-semibold text-slate-400 whitespace-nowrap">Target Workload:</span>
             <select
               value={selectedResourceId}
               onChange={(e) => setSelectedResourceId(e.target.value)}
-              className="text-xs font-medium rounded-md border border-[#E2E8F0] px-3 py-2 bg-white text-[#0F172A] focus:outline-none focus:ring-1 focus:ring-blue-600 w-full md:w-72"
+              className="text-xs font-medium rounded-xl border border-white/[0.08] px-3 py-2 bg-white/[0.03] text-slate-200 focus:outline-none focus:border-blue-500/50 w-full md:w-72 transition-colors"
+              style={{ appearance: 'none' }}
             >
               {resources.map((r) => (
-                <option key={r.id} value={r.id}>
+                <option key={r.id} value={r.id} style={{ background: '#080F21', color: '#E2E8F0' }}>
                   {r.name} ({r.service} • {r.cloudAccount?.provider})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Time Range Selector & Live Pulse */}
           <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md text-xs">
+            <div className="flex items-center gap-1 bg-white/[0.03] border border-white/[0.06] p-1 rounded-xl text-xs">
               {[
-                { id: '1h', label: '1 Hour' },
-                { id: '6h', label: '6 Hours' },
-                { id: '24h', label: '24 Hours' },
-                { id: '7d', label: '7 Days' },
+                { id: '1h', label: '1H' },
+                { id: '6h', label: '6H' },
+                { id: '24h', label: '24H' },
+                { id: '7d', label: '7D' },
               ].map((range) => (
                 <button
                   key={range.id}
                   onClick={() => setTimeRange(range.id)}
-                  className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
                     timeRange === range.id
-                      ? 'bg-white shadow-xs text-blue-600 font-semibold'
-                      : 'text-slate-600 hover:text-[#0F172A]'
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]'
                   }`}
                 >
                   {range.label}
                 </button>
               ))}
             </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              icon={RefreshCw}
-              onClick={loadResourceMetrics}
-              isLoading={loadingMetrics}
-            >
+            <Button variant="secondary" size="sm" icon={RefreshCw} onClick={loadResourceMetrics} isLoading={loadingMetrics}>
               Refresh
             </Button>
           </div>
         </div>
       </Card>
 
-      {/* Target Resource Metadata Summary */}
+      {/* Resource Summary */}
       {currentResource && (
-        <div className="p-4 bg-white border border-[#E2E8F0] rounded-lg shadow-card flex flex-wrap items-center justify-between gap-4">
+        <div className="glass-card rounded-2xl border border-white/[0.06] p-4 flex flex-wrap items-center justify-between gap-4 animate-slide-up" style={{ animationDelay: '200ms', opacity: 0 }}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/25 flex items-center justify-center text-blue-400 shrink-0" style={{ boxShadow: '0 0 16px rgba(59,130,246,0.15)' }}>
               <Cpu className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-[#0F172A]">{currentResource.name}</h3>
+                <h3 className="text-sm font-bold text-white font-display">{currentResource.name}</h3>
                 <ProviderBadge provider={currentResource.cloudAccount?.provider || 'AWS'} />
                 <StatusBadge status={currentResource.status} />
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                {currentResource.service} • {currentResource.region} • {currentResource.instanceCount} Active Instances
+                {currentResource.service} · {currentResource.region} · {currentResource.instanceCount} instances
               </p>
             </div>
           </div>
-
-          {/* Quick Metrics Bar */}
           <div className="flex items-center gap-6 text-xs">
-            <div>
-              <span className="text-slate-400 block text-[11px]">Avg CPU Usage</span>
-              <span className="font-bold text-[#0F172A] font-mono text-sm">{avgCpu}%</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block text-[11px]">Peak CPU</span>
-              <span className="font-bold text-[#0F172A] font-mono text-sm">{maxCpu}%</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block text-[11px]">Avg Memory</span>
-              <span className="font-bold text-[#0F172A] font-mono text-sm">{avgMem}%</span>
-            </div>
-            <div>
-              <span className="text-slate-400 block text-[11px]">p99 Latency</span>
-              <span className="font-bold text-[#0F172A] font-mono text-sm">{avgLat} ms</span>
-            </div>
+            {[{ label: 'Avg CPU', val: `${avgCpu}%` }, { label: 'Peak CPU', val: `${maxCpu}%` }, { label: 'Avg RAM', val: `${avgMem}%` }, { label: 'p99 Latency', val: `${avgLat} ms` }].map(m => (
+              <div key={m.label}>
+                <span className="text-slate-500 block text-[10px] uppercase tracking-wider">{m.label}</span>
+                <span className="font-bold text-white font-mono text-sm">{m.val}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* View Switcher: Live Telemetry vs Predictive Forecast */}
-      <div className="flex items-center gap-2 border-b border-slate-200">
+      {/* View Switcher */}
+      <div className="flex items-center gap-1 border-b border-white/[0.06] animate-slide-up" style={{ animationDelay: '300ms', opacity: 0 }}>
         <button
           onClick={() => setActiveView('telemetry')}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors border-b-2 -mb-px flex items-center gap-2 ${
+          className={`px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-150 border-b-2 -mb-px flex items-center gap-2 ${
             activeView === 'telemetry'
-              ? 'border-blue-600 text-blue-600 bg-white shadow-xs'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
+              ? 'border-blue-500 text-blue-400 bg-blue-500/5'
+              : 'border-transparent text-slate-500 hover:text-slate-300'
           }`}
         >
-          <Activity className="w-4 h-4" />
-          Live Telemetry Streams (4 Metrics)
+          <Activity className="w-3.5 h-3.5" />
+          Live Telemetry (4 Metrics)
         </button>
         <button
-          onClick={() => {
-            setActiveView('forecast');
-            if (forecastData.length === 0) loadResourceForecast();
-          }}
-          className={`px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-colors border-b-2 -mb-px flex items-center gap-2 ${
+          onClick={() => { setActiveView('forecast'); if (forecastData.length === 0) loadResourceForecast(); }}
+          className={`px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-150 border-b-2 -mb-px flex items-center gap-2 ${
             activeView === 'forecast'
-              ? 'border-purple-600 text-purple-600 bg-purple-50/50 shadow-xs'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
+              ? 'border-violet-500 text-violet-400 bg-violet-500/5'
+              : 'border-transparent text-slate-500 hover:text-slate-300'
           }`}
         >
-          <TrendingUp className="w-4 h-4 text-purple-600" />
-          24-Hour Demand Forecast & Prediction Intervals (R2)
+          <TrendingUp className="w-3.5 h-3.5" />
+          24h Demand Forecast (R²)
         </button>
       </div>
 
       {activeView === 'forecast' ? (
-        <Card>
+        <div className="animate-slide-up" style={{ animationDelay: '400ms', opacity: 0 }}>
+          <Card>
           <CardHeader
             title={`${currentResource?.name || 'Resource'} — 24-Hour Demand Forecast`}
             subtitle="Hourly demand prediction with 80% and 95% statistical confidence intervals"
@@ -299,11 +277,13 @@ export function Monitoring() {
             />
           </CardBody>
         </Card>
+        </div>
       ) : (
         /* Deep Telemetry Charts 2x2 Grid */
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* CPU Utilization Chart */}
-          <Card>
+          <div className="animate-slide-up" style={{ animationDelay: '400ms', opacity: 0 }}>
+            <Card>
             <CardHeader
               title="CPU Utilization"
               subtitle="Percent processor load across allocated cores"
@@ -317,9 +297,11 @@ export function Monitoring() {
               />
             </CardBody>
           </Card>
+          </div>
 
           {/* Memory Utilization Chart */}
-          <Card>
+          <div className="animate-slide-up" style={{ animationDelay: '480ms', opacity: 0 }}>
+            <Card>
             <CardHeader
               title="Memory (RAM) Utilization"
               subtitle="Allocated memory buffers and cache load"
@@ -333,9 +315,11 @@ export function Monitoring() {
               />
             </CardBody>
           </Card>
+          </div>
 
           {/* Response Latency Chart */}
-          <Card>
+          <div className="animate-slide-up" style={{ animationDelay: '560ms', opacity: 0 }}>
+            <Card>
             <CardHeader
               title="End-to-End Response Latency"
               subtitle="Round-trip request processing latency (ms)"
@@ -349,9 +333,11 @@ export function Monitoring() {
               />
             </CardBody>
           </Card>
+          </div>
 
           {/* Request Throughput Chart */}
-          <Card>
+          <div className="animate-slide-up" style={{ animationDelay: '640ms', opacity: 0 }}>
+            <Card>
             <CardHeader
               title="Request Throughput"
               subtitle="Ingress requests per minute"
@@ -365,6 +351,7 @@ export function Monitoring() {
               />
             </CardBody>
           </Card>
+          </div>
         </div>
       )}
     </div>

@@ -117,50 +117,43 @@ export function Resources() {
         </Alert>
       )}
 
-      {/* Filter and Action Bar */}
+      {/* Filter Bar */}
       <Card className="p-4">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex flex-1 items-center gap-3 w-full">
             <div className="relative flex-1 max-w-sm">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
               <input
                 type="text"
-                placeholder="Search resources, services, or regions..."
+                placeholder="Search resources, services, regions..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && loadResources()}
-                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-md border border-[#E2E8F0] focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-white/[0.08] bg-white/[0.03] text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500/50 transition-all"
               />
             </div>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="text-xs rounded-md border border-[#E2E8F0] px-3 py-1.5 bg-white text-slate-700 focus:outline-none"
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+              className="text-xs rounded-xl border border-white/[0.08] px-3 py-2 text-slate-300 focus:outline-none cursor-pointer"
+              style={{ background: 'rgba(8,15,33,0.9)', appearance: 'none', paddingRight: '28px' }}
             >
-              <option value="ALL">All Statuses</option>
-              <option value="RUNNING">Running</option>
-              <option value="DEGRADED">Degraded</option>
-              <option value="STOPPED">Stopped</option>
+              <option value="ALL" style={{ background: '#080F21' }}>All Statuses</option>
+              <option value="RUNNING" style={{ background: '#080F21' }}>Running</option>
+              <option value="DEGRADED" style={{ background: '#080F21' }}>Degraded</option>
+              <option value="STOPPED" style={{ background: '#080F21' }}>Stopped</option>
             </select>
-
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="text-xs rounded-md border border-[#E2E8F0] px-3 py-1.5 bg-white text-slate-700 focus:outline-none"
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
+              className="text-xs rounded-xl border border-white/[0.08] px-3 py-2 text-slate-300 focus:outline-none cursor-pointer"
+              style={{ background: 'rgba(8,15,33,0.9)', appearance: 'none', paddingRight: '28px' }}
             >
-              <option value="ALL">All Resource Types</option>
-              <option value="compute">Compute</option>
-              <option value="database">Database</option>
-              <option value="storage">Storage</option>
-              <option value="cache">Cache</option>
+              <option value="ALL" style={{ background: '#080F21' }}>All Types</option>
+              <option value="compute" style={{ background: '#080F21' }}>Compute</option>
+              <option value="database" style={{ background: '#080F21' }}>Database</option>
+              <option value="storage" style={{ background: '#080F21' }}>Storage</option>
+              <option value="cache" style={{ background: '#080F21' }}>Cache</option>
             </select>
           </div>
-
           <div className="flex items-center gap-2 w-full md:w-auto justify-end">
-            <Button variant="outline" size="sm" icon={RefreshCw} onClick={loadResources} isLoading={loading}>
-              Refresh
-            </Button>
+            <Button variant="secondary" size="sm" icon={RefreshCw} onClick={loadResources} isLoading={loading}>Refresh</Button>
           </div>
         </div>
       </Card>
@@ -190,108 +183,60 @@ export function Resources() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-[#E2E8F0] text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+            <table className="min-w-full text-left text-xs dark-table">
+              <thead>
                 <tr>
-                  <th className="px-5 py-3.5">Resource Name</th>
-                  <th className="px-5 py-3.5">Provider</th>
-                  <th className="px-5 py-3.5">Region</th>
-                  <th className="px-5 py-3.5">Type & Service</th>
-                  <th className="px-5 py-3.5">Hardware Config</th>
-                  <th className="px-5 py-3.5">Capacity</th>
-                  <th className="px-5 py-3.5">Monthly Cost</th>
-                  <th className="px-5 py-3.5">Status</th>
-                  <th className="px-5 py-3.5 text-right">Actions</th>
+                  <th>Resource Name</th>
+                  <th>Provider</th>
+                  <th>Region</th>
+                  <th>Type &amp; Service</th>
+                  <th>Hardware</th>
+                  <th>Capacity</th>
+                  <th>Monthly Cost</th>
+                  <th>Status</th>
+                  <th className="text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#E2E8F0] bg-white">
-                {resources.map((res) => (
-                  <tr key={res.id} className="hover:bg-slate-50/80 transition-colors">
+              <tbody>
+                {resources.map((res, i) => (
+                  <tr key={res.id} className="animate-slide-up" style={{ animationDelay: `${i * 50}ms`, opacity: 0 }}>
                     <td className="px-5 py-4">
                       <button
                         onClick={() => setSelectedForDetail(res)}
-                        className="font-semibold text-[#0F172A] hover:text-blue-600 text-left transition-colors flex items-center gap-1.5"
+                        className="font-semibold text-slate-200 hover:text-blue-400 text-left transition-colors flex items-center gap-1.5"
                       >
                         {res.name}
                         {res.hasRecommendation && (
-                          <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" title="Optimization recommendation available" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" style={{ boxShadow: '0 0 6px #60A5FA' }} title="Optimization available" />
                         )}
                       </button>
-                      <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                        ID: {res.id.substring(0, 8)}...
-                      </p>
+                      <p className="text-[10px] text-slate-600 font-mono mt-0.5">ID: {res.id.substring(0, 8)}...</p>
                     </td>
-
+                    <td className="px-5 py-4"><ProviderBadge provider={res.cloudAccount?.provider || 'AWS'} /></td>
+                    <td className="px-5 py-4 text-slate-400 font-mono text-[11px]">{res.region}</td>
                     <td className="px-5 py-4">
-                      <ProviderBadge provider={res.cloudAccount?.provider || 'AWS'} />
+                      <span className="font-medium text-slate-200 text-[11px]">{res.type}</span>
+                      <p className="text-[10px] text-slate-500">{res.service}</p>
                     </td>
-
-                    <td className="px-5 py-4 text-slate-600 font-medium">
-                      {res.region}
+                    <td className="px-5 py-4 text-slate-400 font-mono text-[11px]">
+                      {res.cpu} vCPU · {res.memory} GB · {formatStorage(res.storage)}
                     </td>
-
                     <td className="px-5 py-4">
-                      <span className="font-medium text-slate-700">{res.type}</span>
-                      <p className="text-[11px] text-slate-500">{res.service}</p>
-                    </td>
-
-                    <td className="px-5 py-4 text-slate-600">
-                      <span className="font-mono">{res.cpu} vCPU</span> •{' '}
-                      <span className="font-mono">{res.memory} GB</span> •{' '}
-                      <span className="font-mono">{formatStorage(res.storage)}</span>
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <span className="px-2.5 py-1 rounded bg-slate-100 font-mono font-medium text-[#0F172A]">
+                      <span className="px-2 py-0.5 rounded-lg bg-white/[0.05] border border-white/[0.08] font-mono text-[11px] text-slate-300">
                         {res.instanceCount} instances
                       </span>
                     </td>
-
-                    <td className="px-5 py-4 font-mono font-bold text-[#0F172A]">
-                      {formatCurrency(res.monthlyCost)}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <StatusBadge status={res.status} />
-                    </td>
-
-                    <td className="px-5 py-4 text-right space-x-2 whitespace-nowrap">
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => setSelectedForDetail(res)}
-                      >
-                        Details
-                      </Button>
-
+                    <td className="px-5 py-4 font-mono font-bold text-slate-200 text-[11px]">{formatCurrency(res.monthlyCost)}</td>
+                    <td className="px-5 py-4"><StatusBadge status={res.status} /></td>
+                    <td className="px-5 py-4 text-right space-x-1.5 whitespace-nowrap">
+                      <Button size="xs" variant="secondary" onClick={() => setSelectedForDetail(res)}>Details</Button>
                       {canScale ? (
-                        <Button
-                          size="xs"
-                          variant="primary"
-                          icon={TrendingUp}
-                          onClick={() => setSelectedForScale(res)}
-                        >
-                          Scale
-                        </Button>
+                        <Button size="xs" variant="primary" icon={TrendingUp} onClick={() => setSelectedForScale(res)}>Scale</Button>
                       ) : (
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          disabled
-                          title="Operator or Admin role required to scale workloads"
-                        >
-                          Scale (Locked)
-                        </Button>
+                        <Button size="xs" variant="secondary" disabled title="Operator or Admin required">Locked</Button>
                       )}
-
                       {canModifyResources && (
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => handleRestart(res)}
-                          isLoading={restartingId === res.id}
-                          title="Restart / Refresh Health"
-                        >
+                        <Button size="xs" variant="ghost" onClick={() => handleRestart(res)} isLoading={restartingId === res.id} title="Restart">
                           <RotateCw className="w-3.5 h-3.5" />
                         </Button>
                       )}
